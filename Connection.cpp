@@ -60,12 +60,12 @@ void UDBus::Connection::flush() noexcept
     dbus_connection_flush(connection);
 }
 
-dbus_bool_t UDBus::Connection::send(UDBus::Message& message, dbus_uint32_t* client_serial) noexcept
+udbus_bool_t UDBus::Connection::send(UDBus::Message& message, dbus_uint32_t* client_serial) noexcept
 {
     return dbus_connection_send(connection, message, client_serial);
 }
 
-dbus_bool_t UDBus::Connection::send_with_reply(UDBus::Message& message, UDBus::PendingCall& pending_return, int timeout_milliseconds) noexcept
+udbus_bool_t UDBus::Connection::send_with_reply(UDBus::Message& message, UDBus::PendingCall& pending_return, int timeout_milliseconds) noexcept
 {
     return dbus_connection_send_with_reply(connection, message, pending_return, timeout_milliseconds);
 }

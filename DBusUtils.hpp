@@ -7,11 +7,18 @@
 #include <cstdarg>
 #include <array>
 
-#define GET_MESSAGE(x) *x.getMessagePointer()
+#define GET_MESSAGE(x) *(x).getMessagePointer()
 #define GET_TYPE_ID(x) sizeof(x), typeid(x).hash_code()
 #define SIMPLE_TYPE_UPPER_BOUNDARY 11
 
 #define SIGNATURE(x) UDBus::Types::getTypeInfo<x>().signature.c_str()
+
+// Use this instead of dbus_bool_t
+struct udbus_bool_t
+{
+    udbus_bool_t(dbus_bool_t dbus) noexcept;
+    dbus_bool_t b;
+};
 
 namespace UDBus
 {
@@ -84,7 +91,7 @@ namespace UDBus
             Type{ GET_TYPE_ID(int8_t),             true, DBUS_TYPE_BYTE_AS_STRING },
             Type{ GET_TYPE_ID(dbus_uint32_t),       true, DBUS_TYPE_UINT32_AS_STRING },
             // uint32_t before bool because bool is an uint32, retarded af can confirm
-            Type{ GET_TYPE_ID(dbus_bool_t),         true, DBUS_TYPE_BOOLEAN_AS_STRING },
+            Type{ GET_TYPE_ID(udbus_bool_t),         true, DBUS_TYPE_BOOLEAN_AS_STRING },
             Type{ GET_TYPE_ID(dbus_int16_t),        true, DBUS_TYPE_INT16_AS_STRING },
             Type{ GET_TYPE_ID(dbus_uint16_t),       true, DBUS_TYPE_UINT16_AS_STRING },
             Type{ GET_TYPE_ID(dbus_int32_t),        true, DBUS_TYPE_INT32_AS_STRING },
@@ -100,7 +107,7 @@ namespace UDBus
             Type{ GET_TYPE_ID(std::vector<int8_t>),             true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BYTE_AS_STRING },
             Type{ GET_TYPE_ID(std::vector<dbus_uint32_t>),       true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_UINT32_AS_STRING },
             // uint32_t before bool because bool is an uint32, retarded af can confirm
-            Type{ GET_TYPE_ID(std::vector<dbus_bool_t>),         true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BOOLEAN_AS_STRING },
+            Type{ GET_TYPE_ID(std::vector<udbus_bool_t>),         true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BOOLEAN_AS_STRING },
             Type{ GET_TYPE_ID(std::vector<dbus_int16_t>),        true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_INT16_AS_STRING },
             Type{ GET_TYPE_ID(std::vector<dbus_uint16_t>),       true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_UINT16_AS_STRING },
             Type{ GET_TYPE_ID(std::vector<dbus_int32_t>),        true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_INT32_AS_STRING },
@@ -176,13 +183,18 @@ namespace UDBus
 
         void pending_call_steal_reply(DBusPendingCall* pending) noexcept;
 
+        int get_type() noexcept;
+
+        const char* get_error_name() noexcept;
+        udbus_bool_t set_error_name(const char* name) noexcept;
+
         /**
          * @brief A function that allows you to safely append simple types to dbus messages. The following types are
          * considered simple:
          * - int8_t
          * - uint8_t
          * - dbus_uint32_t
-         * - dbus_bool_t - Do not use regular booleans as the protocol wants 4 bytes
+         * - udbus_bool_t - IMPORTANT: We have a custom type here that encapsulates a dbus_bool_t due to id overlap with uint32_t
          * - dbus_int16_t
          * - dbus_uint16_t
          * - dbus_int32_t
@@ -197,7 +209,7 @@ namespace UDBus
          * - std::vector<int8_t>
          * - std::vector<uint8_t>
          * - std::vector<dbus_uint32_t>
-         * - std::vector<dbus_bool_t> - Do not use regular booleans as the protocol wants 4 bytes
+         * - std::vector<dbus_bool_t> - IMPORTANT: We have a custom type here that encapsulates a dbus_bool_t due to id overlap with uint32_t
          * - std::vector<dbus_int16_t>
          * - std::vector<dbus_uint16_t>
          * - std::vector<dbus_int32_t>
@@ -318,8 +330,8 @@ namespace UDBus
 
         void flush() noexcept;
 
-        dbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
-        dbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
+        udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
+        udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
         Message send_with_reply_and_block(Message& message, int timeout_mislliseconds, Error& error) noexcept;
 
         ~Connection() noexcept;
@@ -336,8 +348,9 @@ namespace UDBus
         Iterator(Message& message, int type, const char* contained_signature, Iterator& it, bool bInit) noexcept;
 
         /**
-         * @brief Initialises the iterator. It may be pre-initialised as a sub-iterator. This should only be used when
-         * setting a sub-iterator. Appending arguments to the iterator, before calling this is perfectly normal.
+         * @brief Initialises the iterator for appending data. It may be pre-initialised as a sub-iterator. This should
+         * only be used when setting a sub-iterator. Appending arguments to the iterator, before calling this is
+         * perfectly normal.
          * @param message - A reference to the message to use the iterator on
          * @param type - The type of the iterator
          * @param contained_signature - The type signature of the sub-iterator. May be nullptr
@@ -345,7 +358,15 @@ namespace UDBus
          * @param bInit - Whether to initialise the
          *
          */
-        void set(Message& message, int type, const char* contained_signature, Iterator& it, bool bInit) noexcept;
+        void setAppend(Message& message, int type, const char* contained_signature, Iterator& it, bool bInit) noexcept;
+
+        /**
+         * @brief Initialises the iterator
+         * @param message - A reference to the message to be used on the iterator
+         * @param it - A reference to the sub-iterator
+         * @param bInit - Whether to initialise the iterator, this should only be done on the iterator layer
+         */
+        void setGet(Message& message, Iterator& it, bool bInit) noexcept;
 
         operator DBusMessageIter*() noexcept;
 
@@ -371,6 +392,15 @@ namespace UDBus
 
         ~Iterator();
     private:
+        enum IteratorType
+        {
+            APPEND_ITERATOR,
+            GET_ITERATOR,
+            EMPTY,
+        };
+
+        IteratorType type = EMPTY;
+
         DBusMessageIter iterator{};
         Iterator* inner = nullptr;
     };
@@ -388,14 +418,14 @@ namespace UDBus
 
         void unref() noexcept;
 
-        dbus_bool_t set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept;
+        udbus_bool_t set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept;
 
         void cancel() noexcept;
-        dbus_bool_t get_completed() noexcept;
+        udbus_bool_t get_completed() noexcept;
 
         void block() noexcept;
 
-        dbus_bool_t set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) noexcept;
+        udbus_bool_t set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) noexcept;
         void* get_data(dbus_int32_t slot) noexcept;
 
         ~PendingCall() noexcept;

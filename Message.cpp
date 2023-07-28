@@ -90,3 +90,18 @@ UDBus::Message::Message(DBusMessage* msg) noexcept
 {
     message = msg;
 }
+
+int UDBus::Message::get_type() noexcept
+{
+    return dbus_message_get_type(message);
+}
+
+const char *UDBus::Message::get_error_name() noexcept
+{
+    return dbus_message_get_error_name(message);
+}
+
+udbus_bool_t UDBus::Message::set_error_name(const char* name) noexcept
+{
+    return dbus_message_set_error_name(message, name);
+}

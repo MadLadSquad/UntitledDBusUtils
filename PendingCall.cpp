@@ -20,7 +20,7 @@ void UDBus::PendingCall::unref() noexcept
     dbus_pending_call_unref(pending);
 }
 
-dbus_bool_t UDBus::PendingCall::set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept
+udbus_bool_t UDBus::PendingCall::set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept
 {
     return dbus_pending_call_set_notify(pending, function, user_data, free_user_data);
 }
@@ -30,7 +30,7 @@ void UDBus::PendingCall::cancel() noexcept
     dbus_pending_call_cancel(pending);
 }
 
-dbus_bool_t UDBus::PendingCall::get_completed() noexcept
+udbus_bool_t UDBus::PendingCall::get_completed() noexcept
 {
     return dbus_pending_call_get_completed(pending);
 }
@@ -40,7 +40,7 @@ void UDBus::PendingCall::block() noexcept
     return dbus_pending_call_block(pending);
 }
 
-dbus_bool_t UDBus::PendingCall::set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) noexcept
+udbus_bool_t UDBus::PendingCall::set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) noexcept
 {
     return dbus_pending_call_set_data(pending, slot, data, free_data_func);
 }
