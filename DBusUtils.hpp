@@ -145,6 +145,7 @@ namespace UDBus
         void free() noexcept;
         ~Error();
     private:
+        bool bCanBeFreed = true;
         DBusError error = {};
     };
 
@@ -178,6 +179,8 @@ namespace UDBus
 
         void ref(Message& reply_to) noexcept;
         void ref(DBusMessage* reply_to) noexcept;
+
+        void unref() noexcept;
 
         void demarshal(const char* str, int len, DBusError* error) noexcept;
 

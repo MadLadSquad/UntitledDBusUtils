@@ -2,8 +2,7 @@
 
 UDBus::Message::~Message() noexcept
 {
-    if (message != nullptr)
-        dbus_message_unref(message);
+    unref();
 }
 
 DBusMessage* UDBus::Message::get() noexcept
@@ -104,4 +103,11 @@ const char *UDBus::Message::get_error_name() noexcept
 udbus_bool_t UDBus::Message::set_error_name(const char* name) noexcept
 {
     return dbus_message_set_error_name(message, name);
+}
+
+void UDBus::Message::unref() noexcept
+{
+    if (message != nullptr)
+        dbus_message_unref(message);
+    message = nullptr;
 }

@@ -17,7 +17,9 @@ void UDBus::PendingCall::ref(UDBus::PendingCall& p) noexcept
 
 void UDBus::PendingCall::unref() noexcept
 {
-    dbus_pending_call_unref(pending);
+    if (pending != nullptr)
+        dbus_pending_call_unref(pending);
+    pending = nullptr;
 }
 
 udbus_bool_t UDBus::PendingCall::set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept
@@ -52,8 +54,7 @@ void* UDBus::PendingCall::get_data(dbus_int32_t slot) noexcept
 
 UDBus::PendingCall::~PendingCall() noexcept
 {
-    if (pending != nullptr)
-        unref();
+    unref();
 }
 
 UDBus::PendingCall::operator DBusPendingCall**() noexcept
