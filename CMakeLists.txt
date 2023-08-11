@@ -24,6 +24,7 @@ add_library(UntitledDBusUtils ${UDBUS_LIBRARY_TYPE} Connection.cpp DBusUtils.cpp
 
 target_include_directories(UntitledDBusUtils PUBLIC ${DBUS_INCLUDE_DIRS})
 target_compile_definitions(UntitledDBusUtils PUBLIC UIMGUI_DBUS_SUBMODULE_ENABLED)
+list(APPEND compile_defs "UIMGUI_DBUS_SUBMODULE_ENABLED")
 
 configure_file(UntitledDBusUtils.pc.in UntitledDBusUtils.pc @ONLY)
 
