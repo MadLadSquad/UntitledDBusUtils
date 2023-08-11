@@ -34,6 +34,5 @@
 cmake-build-*/
 build/
 main.cpp
-CMakeLists.txt
 .idea/
 .vs/
