@@ -30,8 +30,8 @@ configure_file(UntitledDBusUtils.pc.in UntitledDBusUtils.pc @ONLY)
 
 if (UIMGUI_INSTALL)
     install(TARGETS UntitledDBusUtils
-            LIBRARY DESTINATION lib/
-            ARCHIVE DESTINATION lib/)
+            LIBRARY DESTINATION lib64/
+            ARCHIVE DESTINATION lib64/)
     install(FILES ${UDBUS_HEADERS} DESTINATION include/UntitledDBusUtils)
     install(FILES ${PROJECT_BINARY_DIR}/UntitledDBusUtils.pc DESTINATION lib/pkgconfig/)
 endif()
