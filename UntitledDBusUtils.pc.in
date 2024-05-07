@@ -1,13 +1,14 @@
 prefix="@CMAKE_INSTALL_PREFIX@"
 exec_prefix="${prefix}"
 libdir="${prefix}/lib64"
-includedir="${prefix}/include"
+includedir1="${prefix}/include"
+includedir2="@dbus_dirs@"
 compile_defs="@compile_defs@"
 
 Name: @PROJECT_NAME@
 Description: Additional utilities for dealing with libdbus-1
 URL: https://github.com/MadLadSquad/UntitledDBusUtils
 Version: @PROJECT_VERSION@
-Cflags: -I"${includedir}"
+Cflags: -I"${includedir1}""${includedir2}"
 Libs: -L"${libdir}" -l@PROJECT_NAME@
 Libs.private: -L"${libdir}" -l@PROJECT_NAME@

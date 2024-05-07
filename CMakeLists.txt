@@ -22,9 +22,13 @@ set(UDBUS_HEADERS "DBusUtils.hpp")
 add_library(UntitledDBusUtils ${UDBUS_LIBRARY_TYPE} Connection.cpp DBusUtils.cpp Error.cpp Iterator.cpp Message.cpp
         PendingCall.cpp ${UDBUS_HEADERS})
 
+include_directories(${DBUS_INCLUDE_DIRS})
 target_include_directories(UntitledDBusUtils PUBLIC ${DBUS_INCLUDE_DIRS})
 target_compile_definitions(UntitledDBusUtils PUBLIC UIMGUI_DBUS_SUBMODULE_ENABLED)
 list(APPEND compile_defs "UIMGUI_DBUS_SUBMODULE_ENABLED")
+foreach (A IN LISTS DBUS_INCLUDE_DIRS)
+    string(APPEND dbus_dirs " -I${A}")
+endforeach()
 
 configure_file(UntitledDBusUtils.pc.in UntitledDBusUtils.pc @ONLY)
 
