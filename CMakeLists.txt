@@ -31,6 +31,8 @@ foreach (A IN LISTS DBUS_INCLUDE_DIRS)
     string(APPEND dbus_dirs " ${A}")
 endforeach()
 
+target_link_libraries(UntitledDBusUtils PUBLIC ${DBUS_LINK_LIBRARIES})
+
 configure_file(UntitledDBusUtils.pc.in UntitledDBusUtils.pc @ONLY)
 
 if (UIMGUI_INSTALL)
