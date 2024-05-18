@@ -27,8 +27,10 @@ bool UDBus::Iterator::append_fixed_array(int element_type, const void* value, in
 
 void UDBus::Iterator::close_container() noexcept
 {
-    if (inner != nullptr && type == APPEND_ITERATOR)
+    if (inner != nullptr && iteratorType == APPEND_ITERATOR)
         dbus_message_iter_close_container(&iterator, &inner->iterator);
+    inner = nullptr;
+    iteratorType = EMPTY;
 }
 
 void UDBus::Iterator::abandon_container() noexcept
@@ -58,7 +60,7 @@ char* UDBus::Iterator::get_signature() noexcept
 
 void UDBus::Iterator::setAppend(UDBus::Message& message, int type, const char* contained_signature, UDBus::Iterator& it, bool bInit) noexcept
 {
-    type = APPEND_ITERATOR;
+    iteratorType = APPEND_ITERATOR;
     inner = &it;
     if (bInit)
         dbus_message_iter_init_append(message, &iterator);
@@ -98,7 +100,7 @@ void UDBus::Iterator::get_fixed_array(void* value, int* n_elements) noexcept
 
 void UDBus::Iterator::setGet(UDBus::Message& message, Iterator& it, bool bInit) noexcept
 {
-    type = GET_ITERATOR;
+    iteratorType = GET_ITERATOR;
     inner = &it;
     if (bInit)
         dbus_message_iter_init(message, &iterator);

@@ -1,3 +1,16 @@
+/**
+ * Hello everyone, I'm Stanislav Vasilev(Madman10K) and I welcome you to the worst library I have ever created.
+ * Previously, I had some experience working with templates and designing wrappers around other libraries, however,
+ * nothing really compares to what I've written here. I sure hope this doesn't land in history as my magnum opus, but
+ * who knows, I might even land on reddit :skull_emoji:
+ *
+ * I'm really sorry that you, for one reason or another, have to look at the internals of this god forsaken library.
+ * The fact is that without extreme use of templates and systems that work around the user's input to the library and
+ * the underlying dbus-1 C API, easy interaction with dbus using official channels without using Gnome or QT libraries
+ * is simply impossible in C++. I think that the reward is worth it, even if you, the reader of this file may not agree
+ * with me. I completely understand and empathise with you and wish you well on your endeavours. May God be with you!
+ */
+
 #pragma once
 #include <dbus/dbus.h>
 #include <vector>
@@ -6,12 +19,10 @@
 #include <iostream>
 #include <cstdarg>
 #include <array>
+#include <deque>
+#include <functional>
 
-#define GET_MESSAGE(x) *(x).getMessagePointer()
-#define GET_TYPE_ID(x) sizeof(x), typeid(x).hash_code()
-#define SIMPLE_TYPE_UPPER_BOUNDARY 11
-
-#define SIGNATURE(x) UDBus::Types::getTypeInfo<x>().signature.c_str()
+#define UDBUS_GET_MESSAGE(x) *(x).getMessagePointer()
 
 // Use this instead of dbus_bool_t
 struct udbus_bool_t
@@ -22,106 +33,6 @@ struct udbus_bool_t
 
 namespace UDBus
 {
-    struct Type
-    {
-        size_t size;
-        uint64_t id = 0;
-        bool bSimple = true;
-        std::string signature;
-
-    };
-
-    class Types
-    {
-    public:
-        // Given a type(T1) and a variadic templated list of types, representing member types, generates and pushes a
-        // Type struct to the global type registry to represent T1. This is designed for structs only
-        template<typename T1, typename ...T2>
-        static void generateStructSignature() noexcept
-        {
-            generateSignatureGeneric<T1, T2...>(DBUS_STRUCT_BEGIN_CHAR_AS_STRING, DBUS_STRUCT_END_CHAR_AS_STRING);
-        }
-
-        // Given a type(T1) and a variadic templated list of types, representing member types, generates and pushes a
-        // Type struct to the global type registry to represent T1. This is designed for pairs and dictionary entries
-        // only
-        template<typename T1, typename ...T2>
-        static void generateDictEntrySignature() noexcept
-        {
-            generateSignatureGeneric<T1, T2...>(DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING, DBUS_DICT_ENTRY_END_CHAR_AS_STRING);
-        }
-
-        // Given a type, get the type information about it from the global type registry
-        template<typename T>
-        static const Type& getTypeInfo() noexcept
-        {
-            for (const auto& a : get().typesRegistry)
-                if (a.id == typeid(T).hash_code())
-                    return a;
-            // TODO: Throw error here
-        }
-
-    private:
-        friend class Message;
-
-        template<typename T1, typename ...T2>
-        static void generateSignatureGeneric(const char* begin, const char* end) noexcept
-        {
-            std::vector<uint64_t> ids = { typeid(T2).hash_code()... };
-            std::string signature = begin;
-
-            for (auto& a : ids)
-            {
-                for (auto& f : get().typesRegistry)
-                {
-                    if (f.id == a)
-                    {
-                        signature += f.signature;
-                        goto exit_inner;
-                    }
-                }
-        exit_inner:;
-            }
-            get().typesRegistry.emplace_back(GET_TYPE_ID(T1), false, signature + end);
-        }
-
-        std::vector<Type> typesRegistry =
-        {
-            Type{ GET_TYPE_ID(uint8_t),             true, DBUS_TYPE_BYTE_AS_STRING },
-            Type{ GET_TYPE_ID(int8_t),             true, DBUS_TYPE_BYTE_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_uint32_t),       true, DBUS_TYPE_UINT32_AS_STRING },
-            // uint32_t before bool because bool is an uint32, retarded af can confirm
-            Type{ GET_TYPE_ID(udbus_bool_t),         true, DBUS_TYPE_BOOLEAN_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_int16_t),        true, DBUS_TYPE_INT16_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_uint16_t),       true, DBUS_TYPE_UINT16_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_int32_t),        true, DBUS_TYPE_INT32_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_int64_t),        true, DBUS_TYPE_INT64_AS_STRING },
-            Type{ GET_TYPE_ID(dbus_uint64_t),       true, DBUS_TYPE_UINT64_AS_STRING },
-            Type{ GET_TYPE_ID(float),              true, DBUS_TYPE_DOUBLE_AS_STRING },
-            Type{ GET_TYPE_ID(double),              true, DBUS_TYPE_DOUBLE_AS_STRING },
-            Type{ GET_TYPE_ID(const char*),         true, DBUS_TYPE_STRING_AS_STRING },
-            Type{ GET_TYPE_ID(char*),               true, DBUS_TYPE_STRING_AS_STRING },
-
-            // Array types
-            Type{ GET_TYPE_ID(std::vector<uint8_t>),             true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BYTE_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<int8_t>),             true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BYTE_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_uint32_t>),       true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_UINT32_AS_STRING },
-            // uint32_t before bool because bool is an uint32, retarded af can confirm
-            Type{ GET_TYPE_ID(std::vector<udbus_bool_t>),         true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BOOLEAN_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_int16_t>),        true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_INT16_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_uint16_t>),       true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_UINT16_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_int32_t>),        true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_INT32_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_int64_t>),        true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_INT64_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<dbus_uint64_t>),       true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_UINT64_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<float>),              true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_DOUBLE_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<double>),              true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_DOUBLE_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<const char*>),         true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING },
-            Type{ GET_TYPE_ID(std::vector<char*>),               true, DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING },
-        };
-
-        static Types& get() noexcept;
-    };
-
     class Error
     {
     public:
@@ -149,198 +60,41 @@ namespace UDBus
         DBusError error = {};
     };
 
-    // An abstraction on top of DBusMessage* to support RAII and make calls more concise. All functions that return a
-    // DBusMessage* are also replicated here as member functions without the "dbus_message" prefix.
-    //
-    // Any functions with a postfix of "_raw" or "_1" are named so due to C++ rules on function overloading.
-    // So-called "raw functions" simply take a raw libdbus-1 type, instead of our custom type.
-    class Message
-    {
-    public:
-        Message() = default;
-        explicit Message(DBusMessage* msg) noexcept;
+    // Go around the C++ type system using Tag dispatching. This struct will have specialisations for all types we
+    // want to support. Check the macro below
+    template<typename T>
+    struct Tag;
 
-        operator DBusMessage*() noexcept;
+    // Specialises the Tag struct with a type definition and a constexpr string that represents the type
+    #define MAKE_FUNC_BASIC(x, y) template<> struct Tag<x> { using Type = x; static constexpr char TypeString = y; }
 
-        void new_1(int messageType) noexcept;
+    MAKE_FUNC_BASIC(const char*,                    DBUS_TYPE_STRING    );
+    MAKE_FUNC_BASIC(char*,                          DBUS_TYPE_STRING    );
+    MAKE_FUNC_BASIC(int8_t,                         DBUS_TYPE_BYTE      );
+    MAKE_FUNC_BASIC(uint8_t,                        DBUS_TYPE_BYTE      );
+    MAKE_FUNC_BASIC(dbus_int16_t,                   DBUS_TYPE_INT16     );
+    MAKE_FUNC_BASIC(dbus_uint16_t,                  DBUS_TYPE_UINT16    );
+    MAKE_FUNC_BASIC(dbus_int32_t,                   DBUS_TYPE_INT32     );
+    MAKE_FUNC_BASIC(dbus_uint32_t,                  DBUS_TYPE_UINT32    );
+    // uint32_t before bool because bool is an uint32. Retarded af fr
+    MAKE_FUNC_BASIC(udbus_bool_t,                   DBUS_TYPE_BOOLEAN   );
+    MAKE_FUNC_BASIC(dbus_int64_t,                   DBUS_TYPE_INT64     );
+    MAKE_FUNC_BASIC(dbus_uint64_t,                  DBUS_TYPE_UINT64    );
 
-        void new_method_call(const char* bus_name, const char* path, const char* interface, const char* func) noexcept;
+    MAKE_FUNC_BASIC(std::vector<const char*>,       DBUS_TYPE_STRING    );
+    MAKE_FUNC_BASIC(std::vector<char*>,             DBUS_TYPE_STRING    );
+    MAKE_FUNC_BASIC(std::vector<int8_t>,            DBUS_TYPE_BYTE      );
+    MAKE_FUNC_BASIC(std::vector<uint8_t>,           DBUS_TYPE_BYTE      );
+    MAKE_FUNC_BASIC(std::vector<dbus_int16_t>,      DBUS_TYPE_INT16     );
+    MAKE_FUNC_BASIC(std::vector<dbus_uint16_t>,     DBUS_TYPE_UINT16    );
+    MAKE_FUNC_BASIC(std::vector<dbus_int32_t>,      DBUS_TYPE_INT32     );
+    MAKE_FUNC_BASIC(std::vector<dbus_uint32_t>,     DBUS_TYPE_UINT32    );
+    // uint32_t before bool again. I hate this fucking library
+    MAKE_FUNC_BASIC(std::vector<udbus_bool_t>,      DBUS_TYPE_BOOLEAN   );
+    MAKE_FUNC_BASIC(std::vector<dbus_int64_t>,      DBUS_TYPE_INT64     );
+    MAKE_FUNC_BASIC(std::vector<dbus_uint64_t>,     DBUS_TYPE_UINT64    );
 
-        void new_method_return(Message& method_call) noexcept;
-        void new_method_return(DBusMessage* method_call) noexcept;
-
-        void new_signal(const char* path, const char* interface, const char* name) noexcept;
-
-        void new_error(Message& reply_to, const char* error_name, const char* error_message) noexcept;
-        void new_error_raw(DBusMessage* reply_to, const char* error_name, const char* error_message) noexcept;
-
-        void copy(Message& reply_to) noexcept;
-        void copy(DBusMessage* reply_to) noexcept;
-
-        void ref(Message& reply_to) noexcept;
-        void ref(DBusMessage* reply_to) noexcept;
-
-        void unref() noexcept;
-
-        void demarshal(const char* str, int len, DBusError* error) noexcept;
-
-        void pending_call_steal_reply(DBusPendingCall* pending) noexcept;
-
-        int get_type() noexcept;
-
-        const char* get_error_name() noexcept;
-        udbus_bool_t set_error_name(const char* name) noexcept;
-
-        /**
-         * @brief A function that allows you to safely append simple types to dbus messages. The following types are
-         * considered simple:
-         * - int8_t
-         * - uint8_t
-         * - dbus_uint32_t
-         * - udbus_bool_t - IMPORTANT: We have a custom type here that encapsulates a dbus_bool_t due to id overlap with uint32_t
-         * - dbus_int16_t
-         * - dbus_uint16_t
-         * - dbus_int32_t
-         * - dbus_int64_t
-         * - dbus_uint64_t
-         * - float
-         * - double
-         * - const char*
-         * - char*
-         *
-         * As well as the following array types:
-         * - std::vector<int8_t>
-         * - std::vector<uint8_t>
-         * - std::vector<dbus_uint32_t>
-         * - std::vector<dbus_bool_t> - IMPORTANT: We have a custom type here that encapsulates a dbus_bool_t due to id overlap with uint32_t
-         * - std::vector<dbus_int16_t>
-         * - std::vector<dbus_uint16_t>
-         * - std::vector<dbus_int32_t>
-         * - std::vector<dbus_int64_t>
-         * - std::vector<dbus_uint64_t>
-         * - std::vector<float>
-         * - std::vector<double>
-         * - std::vector<const char*>
-         * - std::vector<char*>
-         *
-         * @tparam T - A template varargs list, don't fill this manually, as the compiler will deduce it by you filling
-         * args.
-         * @param args - A vararg list of T*. Makes it so every argument passed is a pointer. Please make sure that
-         * strings are also passed as pointers.
-         */
-        template<typename ...T>
-        void append_args_simple(T*... args) noexcept
-        {
-            const auto standardTypeIDs = Types::get().typesRegistry;
-
-            std::vector<uint64_t> typeIDs = { typeid(*args).hash_code()... };
-            std::vector<void*> values = { (args)... };
-
-            for (size_t i = 0; i < values.size(); i++)
-            {
-                const std::string* type;
-
-                // Find our signature
-                for (const auto& f : standardTypeIDs)
-                {
-                    if (typeIDs[i] == f.id)
-                    {
-                        type = &f.signature;
-                        goto cont;
-                    }
-                }
-            cont:
-                // TODO: Handle error here
-                // This will happen if a type was passed that does not exist
-                if (type->empty())
-                    continue;
-                if (type->front() == DBUS_TYPE_ARRAY)
-                {
-                    if (type->length() > 2)
-                    {
-                        // TODO: Handle error here
-                        return;
-                    }
-
-                    // String handling nightmares
-                    std::vector<char>* normalVector;
-                    std::vector<char*>* stringVector;
-
-                    // A little story: basically a vector is whatever your standard library specifies, however it is
-                    // certain that any vector has the same size as any other vector on your given system. This is
-                    // because it stores a heap pointer for the data.
-                    //
-                    // Anyway, if we have a string we have to use an "std::vector<char*>*", since string arrays given
-                    // to dbus have to be of type char***. If it's not a string then it's whatever, so we're using
-                    // std::vector<char>* just to have something there.
-                    if ((*type)[1] == DBUS_TYPE_STRING)
-                    {
-                        stringVector = (std::vector<char*>*)values[i];
-                        char** dt = stringVector->data();
-
-                        // We already assume a string so why not hardcode it
-                        dbus_message_append_args(message, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING, &dt, stringVector->size(), DBUS_TYPE_INVALID);
-                        return;
-                    }
-                    normalVector = (std::vector<char>*)values[i];
-                    char* dt = normalVector->data();
-
-                    dbus_message_append_args(message, DBUS_TYPE_ARRAY, (*type)[1], &dt, normalVector->size(), DBUS_TYPE_INVALID);
-                }
-                else
-                {
-                    DBusMessageIter iter;
-                    dbus_message_iter_init_append(message, &iter);
-                    dbus_message_iter_append_basic(&iter, type->front(), const_cast<const void*>(values[i]));
-                }
-            }
-        }
-
-        // Use this to pass to function arguments
-        DBusMessage* get() noexcept;
-
-        // Use this to assign to a function returning a raw dbus message pointer. It's preferred to use the
-        // "GET_MESSAGE" macro, as it will make your code more concise and less syntax heavy
-        DBusMessage** getMessagePointer() noexcept;
-
-        ~Message() noexcept;
-    private:
-
-        DBusMessage* message = nullptr;
-    };
-
-    class PendingCall;
-
-    class Connection
-    {
-    public:
-        Connection() = default;
-        explicit Connection(DBusConnection* conn) noexcept;
-
-        operator DBusConnection*() noexcept;
-
-        void bus_get(DBusBusType type, Error& error) noexcept;
-        void bus_get_private(DBusBusType type, Error& error) noexcept;
-
-        void open(const char* address, Error& error) noexcept;
-        void open_private(const char* address, Error& error) noexcept;
-
-        void ref(Connection& conn) noexcept;
-        void ref(DBusConnection* conn) noexcept;
-
-        void unref() noexcept;
-        void close() noexcept;
-
-        void flush() noexcept;
-
-        udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
-        udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
-        Message send_with_reply_and_block(Message& message, int timeout_mislliseconds, Error& error) noexcept;
-
-        ~Connection() noexcept;
-    private:
-        DBusConnection* connection = nullptr;
-    };
+    class Message;
 
     // An abstraction on top of the regular low level iterator constructs. May be easier for some users to use, if they
     // want to be more low level and have more control over what they're pushing
@@ -402,10 +156,162 @@ namespace UDBus
             EMPTY,
         };
 
-        IteratorType type = EMPTY;
+        IteratorType iteratorType = EMPTY;
 
         DBusMessageIter iterator{};
         Iterator* inner = nullptr;
+    };
+
+    enum MessageManipulators
+    {
+        BeginStruct,
+        EndStruct,
+        BeginArray,
+        EndArray,
+        BeginVariant,
+        EndVariant
+    };
+
+    // An abstraction on top of DBusMessage* to support RAII and make calls more concise. All functions that return a
+    // DBusMessage* are also replicated here as member functions without the "dbus_message" prefix.
+    //
+    // Any functions with a postfix of "_raw" or "_1" are named so due to C++ rules on function overloading.
+    // So-called "raw functions" simply take a raw libdbus-1 type, instead of our custom type.
+    class Message
+    {
+    public:
+        Message() = default;
+        explicit Message(DBusMessage* msg) noexcept;
+
+        operator DBusMessage*() noexcept;
+
+        void new_1(int messageType) noexcept;
+
+        void new_method_call(const char* bus_name, const char* path, const char* interface, const char* func) noexcept;
+
+        void new_method_return(Message& method_call) noexcept;
+        void new_method_return(DBusMessage* method_call) noexcept;
+
+        void new_signal(const char* path, const char* interface, const char* name) noexcept;
+
+        void new_error(Message& reply_to, const char* error_name, const char* error_message) noexcept;
+        void new_error_raw(DBusMessage* reply_to, const char* error_name, const char* error_message) noexcept;
+
+        void copy(Message& reply_to) noexcept;
+        void copy(DBusMessage* reply_to) noexcept;
+
+        void ref(Message& reply_to) noexcept;
+        void ref(DBusMessage* reply_to) noexcept;
+
+        void unref() noexcept;
+
+        void demarshal(const char* str, int len, DBusError* error) noexcept;
+
+        void pending_call_steal_reply(DBusPendingCall* pending) noexcept;
+
+        int get_type() noexcept;
+
+        // ostream style << operator. Simply calls append
+        template<typename T>
+        Message& operator<<(const T& t) noexcept
+        {
+            append(t);
+            return *this;
+        }
+
+        Message& operator<<(Message& m) noexcept;
+
+        const char* get_error_name() noexcept;
+        udbus_bool_t set_error_name(const char* name) noexcept;
+
+        // Use this to pass to function arguments
+        DBusMessage* get() noexcept;
+
+        // Use this to assign to a function returning a raw dbus message pointer. It's preferred to use the
+        // "UDBUS_GET_MESSAGE" macro, as it will make your code more concise and less syntax heavy
+        DBusMessage** getMessagePointer() noexcept;
+
+        ~Message() noexcept;
+
+        static Message& BeginStruct(Message& message) noexcept;
+        static Message& EndStruct(Message& message) noexcept;
+
+        static Message& BeginVariant(Message& message) noexcept;
+        static Message& EndVariant(Message& message) noexcept;
+
+        static Message& BeginArray(Message& message) noexcept;
+        static Message& EndArray(Message& message) noexcept;
+
+        template<typename T>
+        void append(const T& t) noexcept
+        {
+            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
+        }
+
+        template<typename T>
+        void append(const std::vector<T>& t) noexcept
+        {
+            // We have to pass a triple char pointer to dbus if we want to pass arrays of strings. Therefore, we check
+            // for the type and if we have a string we do cast magic to get the char***. You don't even know how
+            // previous revisions of that handled this. Here for some fun:
+            // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
+            if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
+            {
+                void** f = (void**)t.data();
+                appendArrayBasic(Tag<T>::TypeString, (void*)f, t.size(), sizeof(T));
+            }
+            else
+                appendArrayBasic(Tag<T>::TypeString, (void*)t.data(), t.size(), sizeof(T));
+        }
+    private:
+        void appendGenericBasic(char type, void* data) noexcept;
+        void appendArrayBasic(char type, void* data, size_t size, size_t typeSize) noexcept;
+
+        static void pushToIteratorStack(Message& message, char type, const char* containedSignature) noexcept;
+        static void handleContainerTypeWithInnerSignature(Message& message, const char* type, const std::function<void(void)>& f) noexcept;
+        static void handleClosingContainers(Message& message) noexcept;
+
+        DBusMessage* message = nullptr;
+        std::deque<Iterator> iteratorStack;
+
+        size_t signatureAccumulationDepth = 0;
+
+        std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList; // Used by containers that require a type signature, like arrays and variants
+    };
+
+    Message& operator<<(Message& message, MessageManipulators manipulators) noexcept;
+
+    class PendingCall;
+
+    class Connection
+    {
+    public:
+        Connection() = default;
+        explicit Connection(DBusConnection* conn) noexcept;
+
+        operator DBusConnection*() noexcept;
+
+        void bus_get(DBusBusType type, Error& error) noexcept;
+        void bus_get_private(DBusBusType type, Error& error) noexcept;
+
+        void open(const char* address, Error& error) noexcept;
+        void open_private(const char* address, Error& error) noexcept;
+
+        void ref(Connection& conn) noexcept;
+        void ref(DBusConnection* conn) noexcept;
+
+        void unref() noexcept;
+        void close() noexcept;
+
+        void flush() noexcept;
+
+        udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
+        udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
+        Message send_with_reply_and_block(Message& message, int timeout_mislliseconds, Error& error) noexcept;
+
+        ~Connection() noexcept;
+    private:
+        DBusConnection* connection = nullptr;
     };
 
     class PendingCall

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(UntitledDBusUtils VERSION 1.0.0.0)
+project(test)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_C_STANDARD 99)
@@ -21,6 +22,7 @@ set(UDBUS_HEADERS "DBusUtils.hpp")
 
 add_library(UntitledDBusUtils ${UDBUS_LIBRARY_TYPE} Connection.cpp DBusUtils.cpp Error.cpp Iterator.cpp Message.cpp
         PendingCall.cpp ${UDBUS_HEADERS})
+add_executable(test main.cpp)
 
 include_directories(${DBUS_INCLUDE_DIRS})
 target_include_directories(UntitledDBusUtils PUBLIC ${DBUS_INCLUDE_DIRS})
@@ -32,6 +34,7 @@ foreach (A IN LISTS DBUS_INCLUDE_DIRS)
 endforeach()
 
 target_link_libraries(UntitledDBusUtils PUBLIC ${DBUS_LINK_LIBRARIES})
+target_link_libraries(test UntitledDBusUtils)
 
 configure_file(UntitledDBusUtils.pc.in UntitledDBusUtils.pc @ONLY)
 
