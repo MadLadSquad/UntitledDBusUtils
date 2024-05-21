@@ -271,7 +271,8 @@ UDBus::Message& UDBus::operator<<(UDBus::Message& message, UDBus::MessageManipul
     }
 }
 
-UDBus::Message& UDBus::Message::operator<<(UDBus::Message& m) noexcept
+template<>
+void UDBus::Message::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept
 {
-    return m;
+
 }

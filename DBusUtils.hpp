@@ -56,7 +56,6 @@ namespace UDBus
         void free() noexcept;
         ~Error();
     private:
-        bool bCanBeFreed = true;
         DBusError error = {};
     };
 
@@ -172,6 +171,15 @@ namespace UDBus
         EndVariant
     };
 
+    enum ArrayBuilderManipulators
+    {
+        Next,
+        Key,
+        Value
+    };
+
+    class ArrayBuilder;
+
     // An abstraction on top of DBusMessage* to support RAII and make calls more concise. All functions that return a
     // DBusMessage* are also replicated here as member functions without the "dbus_message" prefix.
     //
@@ -219,8 +227,6 @@ namespace UDBus
             return *this;
         }
 
-        Message& operator<<(Message& m) noexcept;
-
         const char* get_error_name() noexcept;
         udbus_bool_t set_error_name(const char* name) noexcept;
 
@@ -264,6 +270,8 @@ namespace UDBus
                 appendArrayBasic(Tag<T>::TypeString, (void*)t.data(), t.size(), sizeof(T));
         }
     private:
+        friend class ArrayBuilder;
+
         void appendGenericBasic(char type, void* data) noexcept;
         void appendArrayBasic(char type, void* data, size_t size, size_t typeSize) noexcept;
 
@@ -272,14 +280,54 @@ namespace UDBus
         static void handleClosingContainers(Message& message) noexcept;
 
         DBusMessage* message = nullptr;
+
         std::deque<Iterator> iteratorStack;
-
         size_t signatureAccumulationDepth = 0;
-
         std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList; // Used by containers that require a type signature, like arrays and variants
     };
 
+    // Handle array builders because they're special :/
+    template<>
+    void Message::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept;
+
     Message& operator<<(Message& message, MessageManipulators manipulators) noexcept;
+
+    // A class that is used to build a complex array such as an array of structs or a dictionary
+    class ArrayBuilder
+    {
+    public:
+        ArrayBuilder() = default;
+        explicit ArrayBuilder(Message& msg) noexcept;
+
+        void init(Message& msg) noexcept;
+
+        template<typename T>
+        ArrayBuilder& operator<<(const T& t) noexcept
+        {
+            append(t);
+            return *this;
+        }
+
+        template<typename T>
+        void append(const T& t) noexcept
+        {
+
+        }
+
+        Message& getMessage() noexcept;
+
+        ~ArrayBuilder() noexcept;
+    private:
+        friend class Message;
+
+        Message* message = nullptr;
+
+        std::deque<Iterator> iteratorStack;
+        size_t signatureAccumulationDepth = 0;
+        std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList; // Used by containers that require a type signature, like arrays and variants
+    };
+
+    ArrayBuilder& operator<<(ArrayBuilder& message, MessageManipulators manipulators) noexcept;
 
     class PendingCall;
 

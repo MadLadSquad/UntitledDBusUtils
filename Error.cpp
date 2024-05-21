@@ -37,9 +37,8 @@ bool UDBus::Error::is_set() noexcept
 
 void UDBus::Error::free() noexcept
 {
-    if (bCanBeFreed)
+    if (is_set())
         dbus_error_free(&error);
-    bCanBeFreed = false;
 }
 
 UDBus::Error::~Error()
