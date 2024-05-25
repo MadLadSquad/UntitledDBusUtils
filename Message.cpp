@@ -162,25 +162,25 @@ void UDBus::Message::appendArrayBasic(char type, void* data, size_t size, size_t
         f();
 }
 
-UDBus::Message& UDBus::Message::BeginStruct(UDBus::Message& message) noexcept
+UDBus::Message& UDBus::Message::BeginStruct(UDBus::Message& message, char type, const char* innerType) noexcept
 {
-    const auto f = [&]() -> void {
-        pushToIteratorStack(message, DBUS_TYPE_STRUCT, nullptr);
+    const auto f = [&message, type]() -> void {
+        pushToIteratorStack(message, type, nullptr);
     };
     if (message.signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(message, DBUS_STRUCT_BEGIN_CHAR_AS_STRING, f);
+        handleContainerTypeWithInnerSignature(message, innerType, f);
     else
         f();
     return message;
 }
 
-UDBus::Message& UDBus::Message::EndStruct(UDBus::Message& message) noexcept
+UDBus::Message& UDBus::Message::EndStruct(UDBus::Message& message, const char* type) noexcept
 {
-    const auto f = [&]() -> void {
+    const auto f = [&message]() -> void {
         handleClosingContainers(message);
     };
     if (message.signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(message, DBUS_STRUCT_END_CHAR_AS_STRING, f);
+        handleContainerTypeWithInnerSignature(message, type, f);
     else
         f();
     return message;
@@ -193,26 +193,19 @@ UDBus::Message& UDBus::Message::BeginVariant(UDBus::Message& message) noexcept
     return message;
 }
 
-UDBus::Message& UDBus::Message::EndVariant(UDBus::Message& message) noexcept
+UDBus::Message& UDBus::Message::EndVariant(UDBus::Message& message, std::string containedSignature) noexcept
 {
-    pushToIteratorStack(message, DBUS_TYPE_VARIANT, message.eventList[message.signatureAccumulationDepth - 1].first.c_str());
+    // We only get an empty signature if we're appending to the message directly(not using ArrayBuilder)
+    if (containedSignature.empty())
+        containedSignature = message.eventList[message.signatureAccumulationDepth - 1].first;
+
+    pushToIteratorStack(message, DBUS_TYPE_VARIANT, containedSignature.c_str());
     for (auto& a : message.eventList[message.signatureAccumulationDepth - 1].second)
         a();
 
     message.signatureAccumulationDepth--;
     handleClosingContainers(message);
     message.eventList.pop_back();
-    return message;
-}
-
-UDBus::Message& UDBus::Message::BeginArray(UDBus::Message& message) noexcept
-{
-    return BeginVariant(message); // Same thing
-}
-
-UDBus::Message& UDBus::Message::EndArray(UDBus::Message& message) noexcept
-{
-    EndStruct(message); // Same code really
     return message;
 }
 
@@ -258,10 +251,6 @@ UDBus::Message& UDBus::operator<<(UDBus::Message& message, UDBus::MessageManipul
             return Message::BeginStruct(message);
         case EndStruct:
             return Message::EndStruct(message);
-        case BeginArray:
-            return Message::BeginArray(message);
-        case EndArray:
-            return Message::EndArray(message);
         case BeginVariant:
             return Message::BeginVariant(message);
         case EndVariant:
@@ -274,5 +263,8 @@ UDBus::Message& UDBus::operator<<(UDBus::Message& message, UDBus::MessageManipul
 template<>
 void UDBus::Message::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept
 {
-
+    pushToIteratorStack(*this, DBUS_TYPE_ARRAY, t.signature.c_str());
+    for (auto& a : t.eventList)
+        a();
+    handleClosingContainers(*this);
 }

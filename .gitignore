@@ -36,3 +36,4 @@ build/
 main.cpp
 .idea/
 .vs/
+CMakeLists.txt.test
