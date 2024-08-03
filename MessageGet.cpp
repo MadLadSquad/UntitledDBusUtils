@@ -13,7 +13,7 @@ void UDBus::Message::setupContainer(UDBus::Iterator& it) noexcept
     bInitialGet = false;
 }
 
-void UDBus::Message::endContainer(bool& bWasInitial) noexcept
+void UDBus::Message::endContainer(bool bWasInitial) noexcept
 {
     if (!bInitialGet)
         iteratorStack.pop_back();

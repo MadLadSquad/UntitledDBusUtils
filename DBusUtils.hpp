@@ -266,7 +266,7 @@ namespace UDBus
         std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList{}; // Used by containers that require a type signature, like arrays and variants
 
         void setupContainer(Iterator& it) noexcept;
-        void endContainer(bool& bWasInitial) noexcept;
+        void endContainer(bool bWasInitial) noexcept;
 
 
         DECLARE_TYPE_AND_STRUCT(void, allocateArrayElements, t, {
@@ -296,21 +296,10 @@ namespace UDBus
             if constexpr (UDBus::is_specialisation_of<UDBus::Struct, TT>{})
             {
                 std::cout << "Struct" << std::endl;
-                if (type == DBUS_TYPE_STRUCT)
-                {
-                    setupContainer(*it);
-                    handleMethodCallInternalStruct(*t.data);
-                    endContainer(bWasInitial);
-                }
-                else
-                    throw std::runtime_error("Invalid struct type");
+                handleStructType(*it, type, *t.data, bWasInitial, false);
             }
             else if constexpr (std::is_same<Variant, TT>::value)
-            {
-                setupContainer(*it);
-                t.data->f(iteratorStack.back(), *t.data);
-                endContainer(bInitialGet);
-            }
+                handleVariants(*it, type, *t.data);
             else if constexpr (is_array_type<TT>())
             {
                 if (type != DBUS_TYPE_ARRAY)
@@ -320,35 +309,11 @@ namespace UDBus
                 {
                     auto& current = iteratorStack.back();
                     if constexpr (is_complete<Tag<typename TT::value_type>>{})
-                    {
-                        if (current.get_arg_type() == Tag<typename TT::value_type>::TypeString)
-                            current.get_basic((void*)&t.data->emplace_back());
-                        else
-                            throw std::runtime_error("Invalid basic type as part of array: " + std::to_string(type) + "!");
-                    }
+                        handleBasicType<typename TT::value_type>(current, current.get_arg_type(), (void*)&t.data->emplace_back(), "Invalid basic type as part of array: " + std::to_string(type) + "!");
                     else if constexpr (is_specialisation_of<UDBus::Struct, typename TT::value_type>{})
-                    {
-                        if (current.get_arg_type() != DBUS_TYPE_STRUCT)
-                            throw std::runtime_error("Schema expected a struct, got: " + std::to_string(type));
-                        auto& nit = iteratorStack.emplace_back();
-                        current.setGet(*this, &nit, false);
-
-                        auto& st = t.data->emplace_back();
-                        allocateArrayElementsStruct(st);
-                        handleMethodCallInternalStruct(st);
-
-                        iteratorStack.pop_back();
-                    }
+                        handleStructType(current, current.get_arg_type(), t.data->emplace_back(), false, true);
                     else if constexpr (std::is_same<Variant, TT>::value)
-                    {
-                        if (current.get_arg_type() != DBUS_TYPE_VARIANT)
-                            throw std::runtime_error("Schema expected a variant, got: " + std::to_string(type));
-
-                        auto& nit = iteratorStack.emplace_back();
-                        current.setGet(*this, &nit, false);
-                        t.data->f(iteratorStack.back(), *t.data);
-                        iteratorStack.pop_back();
-                    }
+                        handleVariants(current, current.get_arg_type(), *t.data);
                     current.next();
                 }
                 endContainer(bWasInitial);
@@ -361,53 +326,31 @@ namespace UDBus
                 while (iteratorStack.back().get_arg_type() != DBUS_TYPE_INVALID)
                 {
                     auto& current = iteratorStack.back();
-                    auto& nit = iteratorStack.emplace_back();
-                    current.setGet(*this, &nit, false);
+                    setupContainer(current);
+                    auto& nit = iteratorStack.back();
 
                     if constexpr (is_complete<Tag<typename decltype(*t.data)::key_type>>{} && !is_specialisation_of<std::vector, typename decltype(*t.data)::key_type>{})
-                    {
-                        if (nit.get_arg_type() == Tag<typename decltype(*t.data)::key_type>::TypeString)
-                            nit.get_basic((void*)&t.data->emplace_back());
-                        else
-                            throw std::runtime_error("Invalid basic type as part of a dict entry key: " + std::to_string(type) + "!");
-                    }
+                        handleBasicType<typename decltype(*t.data)::key_type>(nit, nit.get_arg_type(), (void*)&t.data->emplace_back(), "Invalid basic type as part of a dict entry key: " + std::to_string(type) + "!");
                     else
                         throw std::runtime_error("Dictionary key types should always be basic types!");
 
                     nit.next(); // Move to the value
 
                     if constexpr (is_complete<Tag<typename decltype(*t.data)::mapped_type>>{})
-                    {
-                        if (nit.get_arg_type() == Tag<typename decltype(*t.data)::mapped_type>::TypeString)
-                            nit.get_basic((void*)&t.data->emplace_back());
-                        else
-                            throw std::runtime_error("Invalid basic type as part of array: " + std::to_string(type) + "!");
-                    }
+                        handleBasicType<typename decltype(*t.data)::mapped_type>(nit, nit.get_arg_type(), (void*)&t.data->emplace_back(), "Invalid basic type as part of array: " + std::to_string(type) + "!");
                     else if constexpr (is_specialisation_of<UDBus::Struct, typename decltype(*t.data)::mapped_type>{})
-                    {
-                        if (nit.get_arg_type() != DBUS_TYPE_STRUCT)
-                            throw std::runtime_error("Schema expected a struct, got: " + std::to_string(type));
-                        auto& inner = iteratorStack.emplace_back();
-                        current.setGet(*this, &inner, false);
+                        handleStructType(current, current.get_arg_type(), t.data->emplace_back(), false, true);
+                    else if constexpr (std::is_same<Variant, TT>::value)
+                        handleVariants(current, current.get_arg_type(), *t.data);
 
-                        auto& st = t.data->emplace_back();
-                        allocateArrayElementsStruct(st);
-                        handleMethodCallInternalStruct(st);
-
-                        iteratorStack.pop_back();
-                    }
-                    // TODO: handle maps of variants
-
+                    endContainer(false);
                     current.next();
                 }
                 endContainer(bWasInitial);
             }
             else
             {
-                if (type == Tag<TT>::TypeString)
-                    it->get_basic((void*)t.data);
-                else
-                    throw std::runtime_error("Invalid basic type: " + std::to_string(type) + "!");
+                handleBasicType<TT>(*it, type, t.data, "Invalid basic type: " + std::to_string(type) + "!");
                 std::cout << *t.data << std::endl;
             }
 
@@ -423,12 +366,43 @@ namespace UDBus
         })
 
         template<typename T>
-        void handleBasicType(Iterator& it, int type, T* data, std::string& exceptionMessage)
+        void handleBasicType(Iterator& it, int type, void* data, const std::string& exceptionMessage)
         {
             if (type == Tag<T>::TypeString)
                 it.get_basic((void*)data);
             else
                 throw std::runtime_error(exceptionMessage);
+        }
+
+        template<typename T, typename ...T2>
+        void handleStructType(Iterator& it, int type, Struct<T, T2...>& s, bool bWasInitial, bool bAllocateArrayElements)
+        {
+            if (type == DBUS_TYPE_STRUCT)
+            {
+                setupContainer(it);
+                if (bAllocateArrayElements)
+                    allocateArrayElementsStruct(s);
+                handleMethodCallInternalStruct(s);
+                endContainer(bWasInitial);
+            }
+            else
+                throw std::runtime_error("Schema expected a struct, got: " + std::to_string(type));
+        }
+
+        template<typename T>
+        void handleArray(Iterator& it, int type, T& t)
+        {
+
+        }
+
+        void handleVariants(Iterator& current, int type, Variant& data)
+        {
+            if (current.get_arg_type() != DBUS_TYPE_VARIANT)
+                throw std::runtime_error("Schema expected a variant, got: " + std::to_string(type));
+
+            setupContainer(current);
+            data.f(iteratorStack.back(), data);
+            endContainer(bInitialGet);
         }
 
         bool bInitialGet = true;
