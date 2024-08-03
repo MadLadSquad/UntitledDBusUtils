@@ -70,7 +70,28 @@ udbus_bool_t UDBus::Connection::send_with_reply(UDBus::Message& message, UDBus::
     return dbus_connection_send_with_reply(connection, message, pending_return, timeout_milliseconds);
 }
 
-UDBus::Message UDBus::Connection::send_with_reply_and_block(UDBus::Message& message, int timeout_mislliseconds, UDBus::Error& error) noexcept
+UDBus::Message UDBus::Connection::send_with_reply_and_block(UDBus::Message& message, int timeout_milliseconds, UDBus::Error& error) noexcept
 {
-    return Message(dbus_connection_send_with_reply_and_block(connection, message, timeout_mislliseconds, error));
+    return Message(dbus_connection_send_with_reply_and_block(connection, message, timeout_milliseconds, error));
 }
+
+int UDBus::Connection::request_name(const char* name, unsigned int flags, UDBus::Error& error) noexcept
+{
+    return dbus_bus_request_name(connection, name, flags, error);
+}
+
+udbus_bool_t UDBus::Connection::read_write(int timeout_milliseconds) noexcept
+{
+    return dbus_connection_read_write(connection, timeout_milliseconds);
+}
+
+udbus_bool_t UDBus::Connection::read_write_dispatch(int timeout_milliseconds) noexcept
+{
+    return dbus_connection_read_write_dispatch(connection, timeout_milliseconds);
+}
+
+UDBus::Message UDBus::Connection::pop_message() noexcept
+{
+    return Message(dbus_connection_pop_message(connection));
+}
+

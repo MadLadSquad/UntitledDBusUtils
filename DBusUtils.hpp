@@ -12,24 +12,13 @@
  */
 
 #pragma once
-#include <dbus/dbus.h>
-#include <vector>
-#include <cstdint>
-#include <typeinfo>
+#include "DBusUtilsMeta.hpp"
+#include <stdexcept>
+
+// TODO: Remove
 #include <iostream>
-#include <cstdarg>
-#include <array>
-#include <deque>
-#include <functional>
 
 #define UDBUS_GET_MESSAGE(x) *(x).getMessagePointer()
-
-// Use this instead of dbus_bool_t
-struct udbus_bool_t
-{
-    udbus_bool_t(dbus_bool_t dbus) noexcept;
-    dbus_bool_t b;
-};
 
 namespace UDBus
 {
@@ -59,40 +48,6 @@ namespace UDBus
         DBusError error = {};
     };
 
-    // Go around the C++ type system using Tag dispatching. This struct will have specialisations for all types we
-    // want to support. Check the macro below
-    template<typename T>
-    struct Tag;
-
-    // Specialises the Tag struct with a type definition and a constexpr string that represents the type
-    #define MAKE_FUNC_BASIC(x, y) template<> struct Tag<x> { using Type = x; static constexpr char TypeString = y; }
-
-    MAKE_FUNC_BASIC(const char*,                    DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(char*,                          DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(int8_t,                         DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(uint8_t,                        DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(dbus_int16_t,                   DBUS_TYPE_INT16     );
-    MAKE_FUNC_BASIC(dbus_uint16_t,                  DBUS_TYPE_UINT16    );
-    MAKE_FUNC_BASIC(dbus_int32_t,                   DBUS_TYPE_INT32     );
-    MAKE_FUNC_BASIC(dbus_uint32_t,                  DBUS_TYPE_UINT32    );
-    // uint32_t before bool because bool is an uint32. Retarded af fr
-    MAKE_FUNC_BASIC(udbus_bool_t,                   DBUS_TYPE_BOOLEAN   );
-    MAKE_FUNC_BASIC(dbus_int64_t,                   DBUS_TYPE_INT64     );
-    MAKE_FUNC_BASIC(dbus_uint64_t,                  DBUS_TYPE_UINT64    );
-
-    MAKE_FUNC_BASIC(std::vector<const char*>,       DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(std::vector<char*>,             DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(std::vector<int8_t>,            DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(std::vector<uint8_t>,           DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(std::vector<dbus_int16_t>,      DBUS_TYPE_INT16     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint16_t>,     DBUS_TYPE_UINT16    );
-    MAKE_FUNC_BASIC(std::vector<dbus_int32_t>,      DBUS_TYPE_INT32     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint32_t>,     DBUS_TYPE_UINT32    );
-    // uint32_t before bool again. I hate this fucking library
-    MAKE_FUNC_BASIC(std::vector<udbus_bool_t>,      DBUS_TYPE_BOOLEAN   );
-    MAKE_FUNC_BASIC(std::vector<dbus_int64_t>,      DBUS_TYPE_INT64     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint64_t>,     DBUS_TYPE_UINT64    );
-
     class Message;
 
     // An abstraction on top of the regular low level iterator constructs. May be easier for some users to use, if they
@@ -119,10 +74,10 @@ namespace UDBus
         /**
          * @brief Initialises the iterator
          * @param message - A reference to the message to be used on the iterator
-         * @param it - A reference to the sub-iterator
+         * @param it - A reference to the sub-iterator. Can be null if only trying to get basic data
          * @param bInit - Whether to initialise the iterator, this should only be done on the iterator layer
          */
-        void setGet(Message& message, Iterator& it, bool bInit) noexcept;
+        void setGet(Message& message, Iterator* it, bool bInit) noexcept;
 
         operator DBusMessageIter*() noexcept;
 
@@ -199,6 +154,27 @@ namespace UDBus
 
         void new_method_return(Message& method_call) noexcept;
         void new_method_return(DBusMessage* method_call) noexcept;
+        static Message new_method_return_s(Message& method_call) noexcept;
+        static Message new_method_return_s(DBusMessage* method_call) noexcept;
+
+        template<typename T, typename... T2>
+        void handleMethodCall(const char* interface, const char* method, Type<T, T2...>& t)
+        {
+            if (is_method_call(interface, method))
+            {
+                iteratorStack.clear();
+                bInitialGet = true;
+
+                auto& latest = iteratorStack.emplace_back();
+                auto& last = iteratorStack.emplace_back();
+
+                latest.setGet(*this, &last, true);
+                handleMethodCallInternal(t);
+
+                iteratorStack.clear();
+                bInitialGet = true;
+            }
+        }
 
         void new_signal(const char* path, const char* interface, const char* name) noexcept;
 
@@ -216,6 +192,10 @@ namespace UDBus
         void demarshal(const char* str, int len, DBusError* error) noexcept;
 
         void pending_call_steal_reply(DBusPendingCall* pending) noexcept;
+
+        udbus_bool_t is_valid() noexcept;
+
+        udbus_bool_t is_method_call(const char* iface, const char* method) noexcept;
 
         int get_type() noexcept;
 
@@ -257,7 +237,7 @@ namespace UDBus
         void append(const std::vector<T>& t) noexcept
         {
             // We have to pass a triple char pointer to dbus if we want to pass arrays of strings. Therefore, we check
-            // for the type and if we have a string we do cast magic to get the char***. You don't even know how
+            // for the type and if we have a string we do cast magic to get the char***. You don't want to even know how
             // previous revisions of that handled this. Here for some fun:
             // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
             if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
@@ -281,9 +261,177 @@ namespace UDBus
 
         DBusMessage* message = nullptr;
 
-        std::deque<Iterator> iteratorStack;
+        std::deque<Iterator> iteratorStack{};
         size_t signatureAccumulationDepth = 0;
-        std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList; // Used by containers that require a type signature, like arrays and variants
+        std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList{}; // Used by containers that require a type signature, like arrays and variants
+
+        void setupContainer(Iterator& it) noexcept;
+        void endContainer(bool& bWasInitial) noexcept;
+
+
+        DECLARE_TYPE_AND_STRUCT(void, allocateArrayElements, t, {
+            if constexpr (is_specialisation_of<UDBus::Struct, TT>{})
+            {
+                t.data = new TT{};
+                allocateArrayElementsStruct(*t.data);
+            }
+            else
+                t.data = new TT{};
+
+            if (t.next() != nullptr)
+                allocateArrayElements(*t.next());
+        })
+
+        DECLARE_TYPE_AND_STRUCT(void, handleMethodCallInternal, t, {
+            Iterator* it = &(*iteratorStack.rbegin());
+            bool bWasInitial = false;
+            if (bInitialGet)
+            {
+                bWasInitial = true;
+                // Element before the last element
+                it = &(*(iteratorStack.rbegin() + 1));
+            }
+
+            auto type = it->get_arg_type();
+            if constexpr (UDBus::is_specialisation_of<UDBus::Struct, TT>{})
+            {
+                std::cout << "Struct" << std::endl;
+                if (type == DBUS_TYPE_STRUCT)
+                {
+                    setupContainer(*it);
+                    handleMethodCallInternalStruct(*t.data);
+                    endContainer(bWasInitial);
+                }
+                else
+                    throw std::runtime_error("Invalid struct type");
+            }
+            else if constexpr (std::is_same<Variant, TT>::value)
+            {
+                setupContainer(*it);
+                t.data->f(iteratorStack.back(), *t.data);
+                endContainer(bInitialGet);
+            }
+            else if constexpr (is_array_type<TT>())
+            {
+                if (type != DBUS_TYPE_ARRAY)
+                    throw std::runtime_error("Schema expected an array, got: " + std::to_string(type));
+                setupContainer(*it);
+                while (iteratorStack.back().get_arg_type() != DBUS_TYPE_INVALID)
+                {
+                    auto& current = iteratorStack.back();
+                    if constexpr (is_complete<Tag<typename TT::value_type>>{})
+                    {
+                        if (current.get_arg_type() == Tag<typename TT::value_type>::TypeString)
+                            current.get_basic((void*)&t.data->emplace_back());
+                        else
+                            throw std::runtime_error("Invalid basic type as part of array: " + std::to_string(type) + "!");
+                    }
+                    else if constexpr (is_specialisation_of<UDBus::Struct, typename TT::value_type>{})
+                    {
+                        if (current.get_arg_type() != DBUS_TYPE_STRUCT)
+                            throw std::runtime_error("Schema expected a struct, got: " + std::to_string(type));
+                        auto& nit = iteratorStack.emplace_back();
+                        current.setGet(*this, &nit, false);
+
+                        auto& st = t.data->emplace_back();
+                        allocateArrayElementsStruct(st);
+                        handleMethodCallInternalStruct(st);
+
+                        iteratorStack.pop_back();
+                    }
+                    else if constexpr (std::is_same<Variant, TT>::value)
+                    {
+                        if (current.get_arg_type() != DBUS_TYPE_VARIANT)
+                            throw std::runtime_error("Schema expected a variant, got: " + std::to_string(type));
+
+                        auto& nit = iteratorStack.emplace_back();
+                        current.setGet(*this, &nit, false);
+                        t.data->f(iteratorStack.back(), *t.data);
+                        iteratorStack.pop_back();
+                    }
+                    current.next();
+                }
+                endContainer(bWasInitial);
+            }
+            else if constexpr (is_map_type<TT>())
+            {
+                if (type != DBUS_TYPE_ARRAY)
+                    throw std::runtime_error("Schema expected an array, got: " + std::to_string(type));
+                setupContainer(*it);
+                while (iteratorStack.back().get_arg_type() != DBUS_TYPE_INVALID)
+                {
+                    auto& current = iteratorStack.back();
+                    auto& nit = iteratorStack.emplace_back();
+                    current.setGet(*this, &nit, false);
+
+                    if constexpr (is_complete<Tag<typename decltype(*t.data)::key_type>>{} && !is_specialisation_of<std::vector, typename decltype(*t.data)::key_type>{})
+                    {
+                        if (nit.get_arg_type() == Tag<typename decltype(*t.data)::key_type>::TypeString)
+                            nit.get_basic((void*)&t.data->emplace_back());
+                        else
+                            throw std::runtime_error("Invalid basic type as part of a dict entry key: " + std::to_string(type) + "!");
+                    }
+                    else
+                        throw std::runtime_error("Dictionary key types should always be basic types!");
+
+                    nit.next(); // Move to the value
+
+                    if constexpr (is_complete<Tag<typename decltype(*t.data)::mapped_type>>{})
+                    {
+                        if (nit.get_arg_type() == Tag<typename decltype(*t.data)::mapped_type>::TypeString)
+                            nit.get_basic((void*)&t.data->emplace_back());
+                        else
+                            throw std::runtime_error("Invalid basic type as part of array: " + std::to_string(type) + "!");
+                    }
+                    else if constexpr (is_specialisation_of<UDBus::Struct, typename decltype(*t.data)::mapped_type>{})
+                    {
+                        if (nit.get_arg_type() != DBUS_TYPE_STRUCT)
+                            throw std::runtime_error("Schema expected a struct, got: " + std::to_string(type));
+                        auto& inner = iteratorStack.emplace_back();
+                        current.setGet(*this, &inner, false);
+
+                        auto& st = t.data->emplace_back();
+                        allocateArrayElementsStruct(st);
+                        handleMethodCallInternalStruct(st);
+
+                        iteratorStack.pop_back();
+                    }
+                    // TODO: handle maps of variants
+
+                    current.next();
+                }
+                endContainer(bWasInitial);
+            }
+            else
+            {
+                if (type == Tag<TT>::TypeString)
+                    it->get_basic((void*)t.data);
+                else
+                    throw std::runtime_error("Invalid basic type: " + std::to_string(type) + "!");
+                std::cout << *t.data << std::endl;
+            }
+
+            if (it->next())
+            {
+                if (t.next() != nullptr)
+                    handleMethodCallInternal(*t.next());
+                else
+                    throw std::runtime_error("Got more fields than required by the provided schema");
+            }
+            else if (t.next() != nullptr)
+                throw std::runtime_error("Got less fields than required by the provided schema!");
+        })
+
+        template<typename T>
+        void handleBasicType(Iterator& it, int type, T* data, std::string& exceptionMessage)
+        {
+            if (type == Tag<T>::TypeString)
+                it.get_basic((void*)data);
+            else
+                throw std::runtime_error(exceptionMessage);
+        }
+
+        bool bInitialGet = true;
     };
 
     // Handle array builders because they're special :/
@@ -375,6 +523,13 @@ namespace UDBus
         void bus_get(DBusBusType type, Error& error) noexcept;
         void bus_get_private(DBusBusType type, Error& error) noexcept;
 
+        [[nodiscard]] int request_name(const char* name, unsigned int flags, Error& error) noexcept;
+
+        udbus_bool_t read_write(int timeout_milliseconds) noexcept;
+        udbus_bool_t read_write_dispatch(int timeout_milliseconds) noexcept;
+
+        Message pop_message() noexcept;
+
         void open(const char* address, Error& error) noexcept;
         void open_private(const char* address, Error& error) noexcept;
 
@@ -388,7 +543,7 @@ namespace UDBus
 
         udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
         udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
-        Message send_with_reply_and_block(Message& message, int timeout_mislliseconds, Error& error) noexcept;
+        Message send_with_reply_and_block(Message& message, int timeout_milliseconds, Error& error) noexcept;
 
         ~Connection() noexcept;
     private:

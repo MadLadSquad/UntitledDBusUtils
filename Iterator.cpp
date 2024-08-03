@@ -2,6 +2,7 @@
 
 UDBus::Iterator::~Iterator()
 {
+    std::cout << "Destroyed iterator" << std::endl;
     close_container();
 }
 
@@ -17,12 +18,12 @@ UDBus::Iterator::Iterator(UDBus::Message& message, int type, const char* contain
 
 bool UDBus::Iterator::append_basic(int type, const void* value) noexcept
 {
-    return dbus_message_iter_append_basic(&iterator, type, value);
+    return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_basic(&iterator, type, value);
 }
 
 bool UDBus::Iterator::append_fixed_array(int element_type, const void* value, int n_elements) noexcept
 {
-    return dbus_message_iter_append_fixed_array(&iterator, element_type, value, n_elements);
+    return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_fixed_array(&iterator, element_type, value, n_elements);
 }
 
 void UDBus::Iterator::close_container() noexcept
@@ -98,10 +99,12 @@ void UDBus::Iterator::get_fixed_array(void* value, int* n_elements) noexcept
     dbus_message_iter_get_fixed_array(&iterator, value, n_elements);
 }
 
-void UDBus::Iterator::setGet(UDBus::Message& message, Iterator& it, bool bInit) noexcept
+void UDBus::Iterator::setGet(UDBus::Message& message, Iterator* it, bool bInit) noexcept
 {
     iteratorType = GET_ITERATOR;
-    inner = &it;
+    inner = it;
     if (bInit)
         dbus_message_iter_init(message, &iterator);
+    else if (it != nullptr)
+        recurse();
 }
