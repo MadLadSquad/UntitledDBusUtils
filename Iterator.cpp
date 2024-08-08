@@ -2,7 +2,6 @@
 
 UDBus::Iterator::~Iterator()
 {
-    std::cout << "Destroyed iterator" << std::endl;
     close_container();
 }
 

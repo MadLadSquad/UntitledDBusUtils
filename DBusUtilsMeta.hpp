@@ -80,6 +80,13 @@ namespace UDBus
     template<typename T, typename... T2>
     class Struct;
 
+    // Forward declarations to allow the consumer to plug custom types in
+    template<typename T>
+    constexpr bool is_map_type() noexcept;
+
+    template<typename T>
+    constexpr bool is_array_type() noexcept;
+
     #define DECLARE_TYPE_AND_STRUCT_ADDITIONAL(return_type, name, arg_name, additional_arg, body)   \
     template<typename TT, typename... TT2>                                                          \
     return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name, additional_arg) body              \
@@ -121,12 +128,20 @@ namespace UDBus
             destroy_i(t);
         }
 
-
-        template<typename TT, typename ...TT2>
-        static void destroyComplexArray(std::vector<Struct<TT, TT2...>>& array) noexcept
+        template<typename TT>
+        static void destroyComplexArray(TT& array) noexcept
         {
-            for (auto& a : array)
-                destroyComplexArray_iStruct(a);
+            if constexpr (is_array_type<typename TT::value_type>())
+            {
+                for (auto& a : array)
+                    destroyComplexArray(a);
+            }
+            else if constexpr (is_specialisation_of<Struct, typename TT::value_type>{})
+            {
+                for (auto& a : array)
+                    destroyComplexArray_iStruct(a);
+            }
+
             array.clear();
         }
 
@@ -136,6 +151,12 @@ namespace UDBus
         DECLARE_TYPE_AND_STRUCT(static void, destroyComplexArray_i, t, {
             if constexpr (is_specialisation_of<Struct, TT>{})
                 destroyComplexArray_iStruct(*t.data);
+            else if constexpr (is_array_type<TT>())
+            {
+                for (auto& a : *t.data)
+                    destroyComplexArray(a);
+                t.data->clear();
+            }
 
             delete t.data;
             if (t.next() != nullptr)
@@ -204,11 +225,17 @@ namespace UDBus
 
     struct Variant
     {
-        std::function<bool(Iterator&, Variant&)> f = [](Iterator&, Variant&) -> bool { return true; };
-        void* userPointer = nullptr;
+        std::function<bool(Iterator&, void*)> f = [](Iterator&, void*) -> bool { return true; };
     };
 
     Variant& makeVariant(Variant&& v) noexcept;
+
+    struct IgnoreType
+    {
+        char data = 0;
+    };
+
+    IgnoreType& ignore() noexcept;
 
 #ifndef UDBUS_USING_CUSTOM_DICT_TYPES
     template<typename T>

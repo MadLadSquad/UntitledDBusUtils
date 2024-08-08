@@ -26,3 +26,19 @@ UDBus::Variant& UDBus::makeVariant(UDBus::Variant&& v) noexcept
     auto* tmp = new Variant{v};
     return *tmp;
 }
+
+UDBus::IgnoreType& UDBus::ignore() noexcept
+{
+    static IgnoreType i{};
+    return i;
+}
+
+void UDBus::Message::handleVariants(UDBus::Iterator& current, int type, UDBus::Variant& data)
+{
+    if (current.get_arg_type() != DBUS_TYPE_VARIANT)
+        throw std::runtime_error("Schema expected a variant, got: " + std::to_string(type));
+
+    setupContainer(current);
+    data.f(iteratorStack.back(), userPointer);
+    endContainer(bInitialGet);
+}

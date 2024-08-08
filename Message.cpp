@@ -1,6 +1,11 @@
 #include <ranges>
 #include "DBusUtils.hpp"
 
+void UDBus::Message::setUserPointer(void* ptr) noexcept
+{
+    userPointer = ptr;
+}
+
 UDBus::Message::~Message() noexcept
 {
     unref();
