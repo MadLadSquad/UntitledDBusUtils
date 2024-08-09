@@ -33,12 +33,14 @@ UDBus::IgnoreType& UDBus::ignore() noexcept
     return i;
 }
 
-void UDBus::Message::handleVariants(UDBus::Iterator& current, int type, UDBus::Variant& data)
+UDBus::MessageGetResult UDBus::Message::handleVariants(UDBus::Iterator& current, UDBus::Variant& data) noexcept
 {
     if (current.get_arg_type() != DBUS_TYPE_VARIANT)
-        throw std::runtime_error("Schema expected a variant, got: " + std::to_string(type));
+        return RESULT_INVALID_VARIANT_TYPE;
 
     setupContainer(current);
-    data.f(iteratorStack.back(), userPointer);
+    if (!data.f(iteratorStack.back(), userPointer))
+        return RESULT_INVALID_VARIANT_PARSING;
     endContainer(bInitialGet);
+    return RESULT_SUCCESS;
 }

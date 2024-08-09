@@ -29,6 +29,9 @@ namespace UDBus
     struct Variant;
     struct Iterator;
 
+    template<typename T>
+    struct ContainerVariantTemplate;
+
     // Go around the C++ type system using Tag dispatching. This struct will have specialisations for all types we
     // want to support. Check the macro below
     template<typename T>
@@ -89,17 +92,17 @@ namespace UDBus
 
     #define DECLARE_TYPE_AND_STRUCT_ADDITIONAL(return_type, name, arg_name, additional_arg, body)   \
     template<typename TT, typename... TT2>                                                          \
-    return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name, additional_arg) body              \
+    return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name, additional_arg) noexcept body     \
                                                                                                     \
     template<typename TT, typename... TT2>                                                          \
-    return_type name(UDBus::Type<TT, TT2...>& arg_name, additional_arg) body
+    return_type name(UDBus::Type<TT, TT2...>& arg_name, additional_arg) noexcept body
 
     #define DECLARE_TYPE_AND_STRUCT(return_type, name, arg_name, body)                              \
     template<typename TT, typename... TT2>                                                          \
-    return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name) body                              \
+    return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name) noexcept body                     \
                                                                                                     \
     template<typename TT, typename... TT2>                                                          \
-    return_type name(UDBus::Type<TT, TT2...>& arg_name) body
+    return_type name(UDBus::Type<TT, TT2...>& arg_name) noexcept body
 
     template<typename T, typename... T2>
     class Type
@@ -128,41 +131,9 @@ namespace UDBus
             destroy_i(t);
         }
 
-        template<typename TT>
-        static void destroyComplexArray(TT& array) noexcept
-        {
-            if constexpr (is_array_type<typename TT::value_type>())
-            {
-                for (auto& a : array)
-                    destroyComplexArray(a);
-            }
-            else if constexpr (is_specialisation_of<Struct, typename TT::value_type>{})
-            {
-                for (auto& a : array)
-                    destroyComplexArray_iStruct(a);
-            }
-
-            array.clear();
-        }
-
         T* data = nullptr;
         Type<T2...> n{};
     private:
-        DECLARE_TYPE_AND_STRUCT(static void, destroyComplexArray_i, t, {
-            if constexpr (is_specialisation_of<Struct, TT>{})
-                destroyComplexArray_iStruct(*t.data);
-            else if constexpr (is_array_type<TT>())
-            {
-                for (auto& a : *t.data)
-                    destroyComplexArray(a);
-                t.data->clear();
-            }
-
-            delete t.data;
-            if (t.next() != nullptr)
-                destroyComplexArray_i(*t.next());
-        })
-
         DECLARE_TYPE_AND_STRUCT(static void, destroy_i, t, {
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
@@ -171,6 +142,11 @@ namespace UDBus
             }
             else if constexpr (std::is_same<Variant, TT>::value)
                 delete t.data;
+            else if constexpr (is_specialisation_of<ContainerVariantTemplate, TT>{})
+            {
+                delete t.data->v;
+                delete t.data;
+            }
 
             if (t.next() != nullptr)
                 destroy_i(*t.next());
@@ -192,7 +168,7 @@ namespace UDBus
             data = &t;
         }
 
-        constexpr Type<T>* next()
+        constexpr Type<T>* next() noexcept
         {
             return nullptr;
         }
@@ -236,6 +212,36 @@ namespace UDBus
     };
 
     IgnoreType& ignore() noexcept;
+
+    template<typename T>
+    struct ContainerVariantTemplate
+    {
+        T* t = nullptr;
+        Variant* v = nullptr;
+    };
+
+    template<typename T>
+    ContainerVariantTemplate<T>& associateWithVariant(T& t, Variant& v) noexcept
+    {
+        auto* tmp = new ContainerVariantTemplate<T>{ &t, &v };
+        return *tmp;
+    }
+
+    enum MessageGetResult
+    {
+        RESULT_SUCCESS,
+
+        RESULT_MORE_FIELDS_THAN_REQUIRED,
+        RESULT_LESS_FIELDS_THAN_REQUIRED,
+
+        RESULT_INVALID_BASIC_TYPE,
+        RESULT_INVALID_STRUCT_TYPE,
+        RESULT_INVALID_ARRAY_TYPE,
+        RESULT_INVALID_DICTIONARY_TYPE,
+        RESULT_INVALID_DICTIONARY_KEY,
+        RESULT_INVALID_VARIANT_TYPE,
+        RESULT_INVALID_VARIANT_PARSING,
+    };
 
 #ifndef UDBUS_USING_CUSTOM_DICT_TYPES
     template<typename T>
