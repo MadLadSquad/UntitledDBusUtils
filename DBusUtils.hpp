@@ -294,6 +294,7 @@ namespace UDBus
             {
                 t.data = new TT{};
                 allocateArrayElementsStruct(*t.data);
+                t.data->bShouldBeFreed = true;
             }
             else
                 t.data = new TT{};

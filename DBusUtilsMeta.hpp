@@ -149,7 +149,7 @@ namespace UDBus
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
                 destroy_iStruct(t, bWasInArrayOrMap);
-                if (!bWasInArrayOrMap)
+                if (!bWasInArrayOrMap || t.bShouldBeFreed)
                     delete &t;
             }
             else if constexpr (std::is_same<Variant, TT>::value)
@@ -229,6 +229,8 @@ namespace UDBus
     public:
         Struct() noexcept : Type<T, T2...>() {};
         Struct(T& t, T2&... args) noexcept : Type<T, T2...>(t, args...) {};
+
+        bool bShouldBeFreed = false;
     };
 
     template<typename T>
@@ -237,6 +239,8 @@ namespace UDBus
     public:
         Struct() noexcept = default;
         Struct(T& t) noexcept : Type<T>(t) {};
+
+        bool bShouldBeFreed = false;
     };
 
     template<typename T, typename... T2>
