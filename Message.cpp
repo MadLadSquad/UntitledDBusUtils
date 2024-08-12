@@ -137,3 +137,8 @@ udbus_bool_t UDBus::Message::is_valid() noexcept
 {
     return message != nullptr;
 }
+
+udbus_bool_t UDBus::Message::is_signal(const char* iface, const char* method) noexcept
+{
+    return dbus_message_is_signal(message, iface, method);
+}

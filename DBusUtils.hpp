@@ -155,26 +155,19 @@ namespace UDBus
         static Message new_method_return_s(DBusMessage* method_call) noexcept;
 
         template<typename T, typename... T2>
-        MessageGetResult handleMethodCall(const char* interface, const char* method, Type<T, T2...>& t)
+        MessageGetResult handleMethodCall(const char* interface, const char* method, Type<T, T2...>& t) noexcept
         {
             if (is_method_call(interface, method))
-            {
-                iteratorStack.clear();
-                bInitialGet = true;
+                return handleMessage(t);
+            return RESULT_NOT_CALLED;
+        }
 
-                auto& latest = iteratorStack.emplace_back();
-                auto& last = iteratorStack.emplace_back();
-
-                latest.setGet(*this, &last, true);
-                auto result = handleMethodCallInternal(t);
-
-                iteratorStack.clear();
-                variantDictionary.clear();
-                bInitialGet = true;
-
-                return result;
-            }
-            return RESULT_SUCCESS;
+        template<typename T, typename... T2>
+        MessageGetResult handleSignal(const char* interface, const char* method, Type<T, T2...>& t) noexcept
+        {
+            if (is_signal(interface, method))
+                return handleMessage(t);
+            return RESULT_NOT_CALLED;
         }
 
         void new_signal(const char* path, const char* interface, const char* name) noexcept;
@@ -197,6 +190,7 @@ namespace UDBus
         udbus_bool_t is_valid() noexcept;
 
         udbus_bool_t is_method_call(const char* iface, const char* method) noexcept;
+        udbus_bool_t is_signal(const char* iface, const char* method) noexcept;
 
         int get_type() noexcept;
 
@@ -269,12 +263,31 @@ namespace UDBus
         std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList{}; // Used by containers that require a type signature, like arrays and variants
 
         // Contains variant structs that will be called for an array of dictionary of variants.
-        std::deque<std::pair<intptr_t, Variant*>> variantDictionary{};
+        std::deque<Variant*> variantStack{};
 
         void setupContainer(Iterator& it) noexcept;
         void endContainer(bool bWasInitial) noexcept;
 
         void* userPointer = nullptr;
+
+        template<typename T, typename... T2>
+        MessageGetResult handleMessage(Type<T, T2...>& t) noexcept
+        {
+            iteratorStack.clear();
+            bInitialGet = true;
+
+            auto& latest = iteratorStack.emplace_back();
+            auto& last = iteratorStack.emplace_back();
+
+            latest.setGet(*this, &last, true);
+            auto result = handleMethodCallInternal(t);
+
+            iteratorStack.clear();
+            variantStack.clear();
+            bInitialGet = true;
+
+            return result;
+        }
 
         DECLARE_TYPE_AND_STRUCT(void, allocateArrayElements, t, {
             if constexpr (is_specialisation_of<UDBus::Struct, TT>{})
@@ -302,7 +315,7 @@ namespace UDBus
             {
                 if (bPopVariant)
                 {
-                    CHECK_SUCCESS(handleVariants(it, *variantDictionary.back().second));
+                    CHECK_SUCCESS(handleVariants(it, *variantStack.back()));
                 }
                 else
                 {
@@ -324,7 +337,7 @@ namespace UDBus
 
             if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})
                 if (bPopVariant)
-                    variantDictionary.pop_back();
+                    variantStack.pop_back();
 
             return RESULT_SUCCESS;
         }
@@ -332,7 +345,7 @@ namespace UDBus
 #define HANDLE_CONTAINER_VARIANT_TEMPLATES(x, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant)    if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})    \
 {                                                                                                                                                                                       \
     auto& p = x;                                                                                                                                                                        \
-    variantDictionary.emplace_back((intptr_t)&p, (x).v);                                                                                                                                \
+    variantStack.emplace_back((x).v);                                                                                                                                \
     CHECK_SUCCESS(routeType(x->t, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant));                                                                                            \
 }                                                                                                                                                                                       \
 else                                                                                                                                                                                    \
@@ -366,7 +379,7 @@ else                                                                            
                 return RESULT_LESS_FIELDS_THAN_REQUIRED;
 
             if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})
-                variantDictionary.pop_back();
+                variantStack.pop_back();
             return RESULT_SUCCESS;
         })
 

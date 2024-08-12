@@ -128,29 +128,76 @@ namespace UDBus
         template<typename TT, typename... TT2>
         static void destroy(Type<TT, TT2...>& t) noexcept
         {
-            destroy_i(t);
+            bool bWasInArrayOrMap = false;
+            destroy_i(t, bWasInArrayOrMap);
+        }
+
+        template<typename TT>
+        static void destroyComplex(TT& t) noexcept
+        {
+            bool bWasInArrayOrMap = false;
+            routeDestroy(t, bWasInArrayOrMap);
         }
 
         T* data = nullptr;
         Type<T2...> n{};
     private:
-        DECLARE_TYPE_AND_STRUCT(static void, destroy_i, t, {
+        template<typename TT>
+        static void routeDestroy(TT& t, bool& bWasInArrayOrMap) noexcept
+        {
+            bool bParentIsArrayOrMap = bWasInArrayOrMap;
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
-                destroy_iStruct(*t.data);
-                delete t.data;
+                destroy_iStruct(t, bWasInArrayOrMap);
+                if (!bWasInArrayOrMap)
+                    delete &t;
             }
             else if constexpr (std::is_same<Variant, TT>::value)
-                delete t.data;
+            {
+                if (!bWasInArrayOrMap)
+                    delete &t;
+            }
             else if constexpr (is_specialisation_of<ContainerVariantTemplate, TT>{})
             {
-                delete t.data->v;
-                delete t.data;
+                delete t.v;
+                if (!bWasInArrayOrMap)
+                    delete &t;
             }
+            else if constexpr (is_array_type<TT>())
+            {
+                bWasInArrayOrMap = true;
+                for (auto& a : t)
+                    routeDestroy(a, bWasInArrayOrMap);
+                t.clear();
+                if (!bParentIsArrayOrMap)
+                    bWasInArrayOrMap = false;
+            }
+            else if constexpr (is_map_type<TT>())
+            {
+                bWasInArrayOrMap = true;
+                for (auto& [key, val] : t)
+                    routeDestroy(val, bWasInArrayOrMap);
+                t.clear();
+                if (!bParentIsArrayOrMap)
+                    bWasInArrayOrMap = false;
+            }
+        }
 
+        template<typename TT, typename ...TT2>
+        static void destroy_i(Type<TT, TT2...>& t, bool& bWasInArrayOrMap) noexcept
+        {
+            routeDestroy(*t.data, bWasInArrayOrMap);
             if (t.next() != nullptr)
-                destroy_i(*t.next());
-        })
+                destroy_i(*t.next(), bWasInArrayOrMap);
+        }
+
+        template<typename TT, typename ...TT2>
+        static void destroy_iStruct(Struct<TT, TT2...>& t, bool& bWasInArrayOrMap) noexcept
+        {
+            routeDestroy(*t.data, bWasInArrayOrMap);
+            if (t.next() != nullptr)
+                destroy_i(*t.next(), bWasInArrayOrMap);
+        }
     };
 
     template<typename T>
@@ -230,6 +277,8 @@ namespace UDBus
     enum MessageGetResult
     {
         RESULT_SUCCESS,
+
+        RESULT_NOT_CALLED,
 
         RESULT_MORE_FIELDS_THAN_REQUIRED,
         RESULT_LESS_FIELDS_THAN_REQUIRED,
