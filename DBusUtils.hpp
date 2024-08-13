@@ -13,7 +13,6 @@
 
 #pragma once
 #include "DBusUtilsMeta.hpp"
-#include <stdexcept>
 
 #define UDBUS_GET_MESSAGE(x) *(x).getMessagePointer()
 
