@@ -158,11 +158,11 @@ namespace UDBus
             bool bParentShouldDestroyEverything = bDestroyEverything;
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
-                if (t.bShouldBeFreed)
+                if (t.bShouldBeFreed || t.bIsOrigin)
                     bDestroyEverything = true;
 
                 destroy_iStruct(t, bWasInArrayOrMap, bDestroyEverything);
-                if (!bWasInArrayOrMap || bDestroyEverything)
+                if (!bWasInArrayOrMap || (bDestroyEverything && !t.bIsOrigin))
                     delete &t;
 
                 if (!bParentShouldDestroyEverything)
@@ -256,6 +256,7 @@ namespace UDBus
         Struct(T& t, T2&... args) noexcept : Type<T, T2...>(t, args...) {};
 
         bool bShouldBeFreed = false;
+        bool bIsOrigin = false;
     };
 
     template<typename T>
@@ -266,6 +267,7 @@ namespace UDBus
         Struct(T& t) noexcept : Type<T>(t) {};
 
         bool bShouldBeFreed = false;
+        bool bIsOrigin = false;
     };
 
     template<typename T, typename... T2>

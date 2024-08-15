@@ -400,7 +400,11 @@ else                                                                            
             {
                 setupContainer(it);
                 if (bAllocateArrayElements)
+                {
                     allocateArrayElementsStruct(s);
+                    s.bIsOrigin = true;
+                }
+
                 CHECK_SUCCESS(handleMethodCallInternalStruct(s));
                 endContainer(bWasInitial);
             }
