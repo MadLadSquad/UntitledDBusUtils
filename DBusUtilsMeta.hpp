@@ -104,6 +104,13 @@ namespace UDBus
     template<typename TT, typename... TT2>                                                          \
     return_type name(UDBus::Type<TT, TT2...>& arg_name) noexcept body
 
+    struct IgnoreType
+    {
+        char data = 0;
+    };
+
+    IgnoreType& ignore() noexcept;
+
     template<typename T, typename... T2>
     class Type
     {
@@ -129,74 +136,92 @@ namespace UDBus
         static void destroy(Type<TT, TT2...>& t) noexcept
         {
             bool bWasInArrayOrMap = false;
-            destroy_i(t, bWasInArrayOrMap);
+            bool bDestroyEverything = false;
+            destroy_i(t, bWasInArrayOrMap, bDestroyEverything);
         }
 
         template<typename TT>
         static void destroyComplex(TT& t) noexcept
         {
             bool bWasInArrayOrMap = false;
-            routeDestroy(t, bWasInArrayOrMap);
+            bool bDestroyEverything = false;
+            routeDestroy(t, bWasInArrayOrMap, bDestroyEverything);
         }
 
         T* data = nullptr;
         Type<T2...> n{};
     private:
         template<typename TT>
-        static void routeDestroy(TT& t, bool& bWasInArrayOrMap) noexcept
+        static void routeDestroy(TT& t, bool& bWasInArrayOrMap, bool& bDestroyEverything) noexcept
         {
             bool bParentIsArrayOrMap = bWasInArrayOrMap;
+            bool bParentShouldDestroyEverything = bDestroyEverything;
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
-                destroy_iStruct(t, bWasInArrayOrMap);
-                if (!bWasInArrayOrMap || t.bShouldBeFreed)
+                if (t.bShouldBeFreed)
+                    bDestroyEverything = true;
+
+                destroy_iStruct(t, bWasInArrayOrMap, bDestroyEverything);
+                if (!bWasInArrayOrMap || bDestroyEverything)
                     delete &t;
+
+                if (!bParentShouldDestroyEverything)
+                    bDestroyEverything = false;
             }
             else if constexpr (std::is_same<Variant, TT>::value)
             {
-                if (!bWasInArrayOrMap)
+                if (!bWasInArrayOrMap || bDestroyEverything)
                     delete &t;
             }
             else if constexpr (is_specialisation_of<ContainerVariantTemplate, TT>{})
             {
                 delete t.v;
-                if (!bWasInArrayOrMap)
+                if (!bWasInArrayOrMap || bDestroyEverything)
                     delete &t;
             }
             else if constexpr (is_array_type<TT>())
             {
                 bWasInArrayOrMap = true;
                 for (auto& a : t)
-                    routeDestroy(a, bWasInArrayOrMap);
+                    routeDestroy(a, bWasInArrayOrMap, bDestroyEverything);
                 t.clear();
                 if (!bParentIsArrayOrMap)
                     bWasInArrayOrMap = false;
+
+                if (bDestroyEverything)
+                    delete &t;
             }
             else if constexpr (is_map_type<TT>())
             {
                 bWasInArrayOrMap = true;
                 for (auto& [key, val] : t)
-                    routeDestroy(val, bWasInArrayOrMap);
+                    routeDestroy(val, bWasInArrayOrMap, bDestroyEverything);
                 t.clear();
                 if (!bParentIsArrayOrMap)
                     bWasInArrayOrMap = false;
+
+                if (bDestroyEverything)
+                    delete &t;
             }
+            else if constexpr (!std::is_same<IgnoreType, TT>::value)
+                if (bDestroyEverything)
+                    delete &t;
         }
 
         template<typename TT, typename ...TT2>
-        static void destroy_i(Type<TT, TT2...>& t, bool& bWasInArrayOrMap) noexcept
+        static void destroy_i(Type<TT, TT2...>& t, bool& bWasInArrayOrMap, bool& bDestroyEverything) noexcept
         {
-            routeDestroy(*t.data, bWasInArrayOrMap);
+            routeDestroy(*t.data, bWasInArrayOrMap, bDestroyEverything);
             if (t.next() != nullptr)
-                destroy_i(*t.next(), bWasInArrayOrMap);
+                destroy_i(*t.next(), bWasInArrayOrMap, bDestroyEverything);
         }
 
         template<typename TT, typename ...TT2>
-        static void destroy_iStruct(Struct<TT, TT2...>& t, bool& bWasInArrayOrMap) noexcept
+        static void destroy_iStruct(Struct<TT, TT2...>& t, bool& bWasInArrayOrMap, bool& bDestroyEverything) noexcept
         {
-            routeDestroy(*t.data, bWasInArrayOrMap);
+            routeDestroy(*t.data, bWasInArrayOrMap, bDestroyEverything);
             if (t.next() != nullptr)
-                destroy_i(*t.next(), bWasInArrayOrMap);
+                destroy_i(*t.next(), bWasInArrayOrMap, bDestroyEverything);
         }
     };
 
@@ -256,13 +281,6 @@ namespace UDBus
     };
 
     Variant& makeVariant(Variant&& v) noexcept;
-
-    struct IgnoreType
-    {
-        char data = 0;
-    };
-
-    IgnoreType& ignore() noexcept;
 
     template<typename T>
     struct ContainerVariantTemplate
