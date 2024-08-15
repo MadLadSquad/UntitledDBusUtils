@@ -244,6 +244,25 @@ namespace UDBus
         }
 
         void setUserPointer(void* ptr) noexcept;
+
+        template<typename T, typename... T2>
+        MessageGetResult handleMessage(Type<T, T2...>& t) noexcept
+        {
+            iteratorStack.clear();
+            bInitialGet = true;
+
+            auto& latest = iteratorStack.emplace_back();
+            auto& last = iteratorStack.emplace_back();
+
+            latest.setGet(*this, &last, true);
+            auto result = handleMethodCallInternal(t);
+
+            iteratorStack.clear();
+            variantStack.clear();
+            bInitialGet = true;
+
+            return result;
+        }
     private:
         friend class ArrayBuilder;
         friend UDBus::ArrayBuilder& UDBus::operator<<(UDBus::ArrayBuilder&, UDBus::ArrayBuilderManipulators) noexcept;
@@ -268,25 +287,6 @@ namespace UDBus
         void endContainer(bool bWasInitial) noexcept;
 
         void* userPointer = nullptr;
-
-        template<typename T, typename... T2>
-        MessageGetResult handleMessage(Type<T, T2...>& t) noexcept
-        {
-            iteratorStack.clear();
-            bInitialGet = true;
-
-            auto& latest = iteratorStack.emplace_back();
-            auto& last = iteratorStack.emplace_back();
-
-            latest.setGet(*this, &last, true);
-            auto result = handleMethodCallInternal(t);
-
-            iteratorStack.clear();
-            variantStack.clear();
-            bInitialGet = true;
-
-            return result;
-        }
 
         DECLARE_TYPE_AND_STRUCT(void, allocateArrayElements, t, {
             if constexpr (is_specialisation_of<UDBus::Struct, TT>{})
@@ -330,7 +330,7 @@ namespace UDBus
             {
                 CHECK_SUCCESS(handleDictionaries(it, type, t, bWasInitial));
             }
-            else if constexpr (!std::is_same<IgnoreType, TT>::value)
+            else if constexpr (!std::is_same<IgnoreType, TT>::value && !std::is_same<BumpType, TT>::value)
             {
                 CHECK_SUCCESS(handleBasicType<TT>(it, type, &t));
             }
@@ -372,7 +372,7 @@ else                                                                            
                 {
                     CHECK_SUCCESS(handleMethodCallInternal(*t.next()));
                 }
-                else
+                else if (!std::is_same<BumpType, TT>::value)
                     return RESULT_MORE_FIELDS_THAN_REQUIRED;
             }
             else if (t.next() != nullptr)
@@ -386,7 +386,8 @@ else                                                                            
         template<typename T>
         MessageGetResult handleBasicType(Iterator& it, int type, void* data) noexcept
         {
-            if (type == Tag<T>::TypeString)
+            // Make an exception for object paths as strings
+            if (type == Tag<T>::TypeString || (type == DBUS_TYPE_OBJECT_PATH && Tag<T>::TypeString == DBUS_TYPE_STRING))
                 it.get_basic((void*)data);
             else
                 return RESULT_INVALID_BASIC_TYPE;

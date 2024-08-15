@@ -111,6 +111,13 @@ namespace UDBus
 
     IgnoreType& ignore() noexcept;
 
+    struct BumpType
+    {
+        char data = 0;
+    };
+
+    BumpType& bump() noexcept;
+
     template<typename T, typename... T2>
     class Type
     {
@@ -203,7 +210,7 @@ namespace UDBus
                 if (bDestroyEverything)
                     delete &t;
             }
-            else if constexpr (!std::is_same<IgnoreType, TT>::value)
+            else if constexpr (!std::is_same<IgnoreType, TT>::value || !std::is_same<BumpType, TT>::value)
                 if (bDestroyEverything)
                     delete &t;
         }

@@ -33,6 +33,12 @@ UDBus::IgnoreType& UDBus::ignore() noexcept
     return i;
 }
 
+UDBus::BumpType& UDBus::bump() noexcept
+{
+    static BumpType i{};
+    return i;
+}
+
 UDBus::MessageGetResult UDBus::Message::handleVariants(UDBus::Iterator& current, UDBus::Variant& data) noexcept
 {
     if (current.get_arg_type() != DBUS_TYPE_VARIANT)
