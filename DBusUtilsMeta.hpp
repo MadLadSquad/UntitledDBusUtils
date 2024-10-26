@@ -19,7 +19,7 @@
 struct udbus_bool_t
 {
     udbus_bool_t(dbus_bool_t dbus) noexcept;
-    operator bool() noexcept;
+    operator bool() const noexcept;
     dbus_bool_t b;
 };
 
@@ -175,7 +175,7 @@ namespace UDBus
                 if (!bParentShouldDestroyEverything)
                     bDestroyEverything = false;
             }
-            else if constexpr (std::is_same<Variant, TT>::value)
+            else if constexpr (std::is_same_v<Variant, TT>)
             {
                 if (!bWasInArrayOrMap || bDestroyEverything)
                     delete &t;
@@ -210,7 +210,7 @@ namespace UDBus
                 if (bDestroyEverything)
                     delete &t;
             }
-            else if constexpr (!std::is_same<IgnoreType, TT>::value || !std::is_same<BumpType, TT>::value)
+            else if constexpr (!std::is_same_v<IgnoreType, TT> || !std::is_same_v<BumpType, TT>)
                 if (bDestroyEverything)
                     delete &t;
         }

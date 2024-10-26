@@ -30,7 +30,7 @@ bool UDBus::Error::has_name(const char* name) const noexcept
     return dbus_error_has_name(&error, name);;
 }
 
-bool UDBus::Error::is_set() noexcept
+bool UDBus::Error::is_set() const noexcept
 {
     return dbus_error_is_set(&error);
 }

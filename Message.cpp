@@ -11,7 +11,7 @@ UDBus::Message::~Message() noexcept
     unref();
 }
 
-DBusMessage* UDBus::Message::get() noexcept
+DBusMessage* UDBus::Message::get() const noexcept
 {
     return message;
 }
@@ -26,7 +26,7 @@ void UDBus::Message::new_method_call(const char* bus_name, const char* path, con
     message = dbus_message_new_method_call(bus_name, path, interface, func);
 }
 
-void UDBus::Message::new_1(int messageType) noexcept
+void UDBus::Message::new_1(const int messageType) noexcept
 {
     message = dbus_message_new(messageType);
 }
@@ -71,7 +71,7 @@ void UDBus::Message::copy(UDBus::Message& reply_to) noexcept
     message = dbus_message_copy(UDBUS_GET_MESSAGE(reply_to));
 }
 
-void UDBus::Message::copy(DBusMessage* reply_to) noexcept
+void UDBus::Message::copy(const DBusMessage* reply_to) noexcept
 {
     message = dbus_message_copy(reply_to);
 }
@@ -86,12 +86,12 @@ void UDBus::Message::ref(DBusMessage* reply_to) noexcept
     message = dbus_message_ref(reply_to);
 }
 
-void UDBus::Message::demarshal(const char* str, int len, DBusError* error) noexcept
+void UDBus::Message::demarshal(const char* str, const int len, DBusError* error) noexcept
 {
     message = dbus_message_demarshal(str, len, error);
 }
 
-UDBus::Message::operator DBusMessage*() noexcept
+UDBus::Message::operator DBusMessage*() const noexcept
 {
     return message;
 }
@@ -106,17 +106,17 @@ UDBus::Message::Message(DBusMessage* msg) noexcept
     message = msg;
 }
 
-int UDBus::Message::get_type() noexcept
+int UDBus::Message::get_type() const noexcept
 {
     return dbus_message_get_type(message);
 }
 
-const char *UDBus::Message::get_error_name() noexcept
+const char* UDBus::Message::get_error_name() const noexcept
 {
     return dbus_message_get_error_name(message);
 }
 
-udbus_bool_t UDBus::Message::set_error_name(const char* name) noexcept
+udbus_bool_t UDBus::Message::set_error_name(const char* name) const noexcept
 {
     return dbus_message_set_error_name(message, name);
 }
@@ -128,17 +128,17 @@ void UDBus::Message::unref() noexcept
     message = nullptr;
 }
 
-udbus_bool_t UDBus::Message::is_method_call(const char* iface, const char* method) noexcept
+udbus_bool_t UDBus::Message::is_method_call(const char* iface, const char* method) const noexcept
 {
     return dbus_message_is_method_call(message, iface, method);
 }
 
-udbus_bool_t UDBus::Message::is_valid() noexcept
+udbus_bool_t UDBus::Message::is_valid() const noexcept
 {
     return message != nullptr;
 }
 
-udbus_bool_t UDBus::Message::is_signal(const char* iface, const char* method) noexcept
+udbus_bool_t UDBus::Message::is_signal(const char* iface, const char* method) const noexcept
 {
     return dbus_message_is_signal(message, iface, method);
 }

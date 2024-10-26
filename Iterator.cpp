@@ -10,17 +10,17 @@ UDBus::Iterator::operator DBusMessageIter*() noexcept
     return &iterator;
 }
 
-UDBus::Iterator::Iterator(UDBus::Message& message, int type, const char* contained_signature, UDBus::Iterator& it, bool bInit) noexcept
+UDBus::Iterator::Iterator(UDBus::Message& message, const int type, const char* contained_signature, UDBus::Iterator& it, const bool bInit) noexcept
 {
     setAppend(message, type, contained_signature, it, bInit);
 }
 
-bool UDBus::Iterator::append_basic(int type, const void* value) noexcept
+bool UDBus::Iterator::append_basic(const int type, const void* value) noexcept
 {
     return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_basic(&iterator, type, value);
 }
 
-bool UDBus::Iterator::append_fixed_array(int element_type, const void* value, int n_elements) noexcept
+bool UDBus::Iterator::append_fixed_array(const int element_type, const void* value, const int n_elements) noexcept
 {
     return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_fixed_array(&iterator, element_type, value, n_elements);
 }
@@ -58,7 +58,7 @@ char* UDBus::Iterator::get_signature() noexcept
     return dbus_message_iter_get_signature(&iterator);
 }
 
-void UDBus::Iterator::setAppend(UDBus::Message& message, int type, const char* contained_signature, UDBus::Iterator& it, bool bInit) noexcept
+void UDBus::Iterator::setAppend(UDBus::Message& message, const int type, const char* contained_signature, UDBus::Iterator& it, const bool bInit) noexcept
 {
     iteratorType = APPEND_ITERATOR;
     inner = &it;
@@ -98,7 +98,7 @@ void UDBus::Iterator::get_fixed_array(void* value, int* n_elements) noexcept
     dbus_message_iter_get_fixed_array(&iterator, value, n_elements);
 }
 
-void UDBus::Iterator::setGet(UDBus::Message& message, Iterator* it, bool bInit) noexcept
+void UDBus::Iterator::setGet(UDBus::Message& message, Iterator* it, const bool bInit) noexcept
 {
     iteratorType = GET_ITERATOR;
     inner = it;

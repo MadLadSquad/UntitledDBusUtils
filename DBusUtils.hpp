@@ -33,7 +33,7 @@ namespace UDBus
 
         bool has_name(const char* name) const noexcept;
 
-        bool is_set() noexcept;
+        [[nodiscard]] bool is_set() const noexcept;
 
         [[nodiscard]] const char* name() const noexcept;
         [[nodiscard]] const char* message() const noexcept;
@@ -142,7 +142,7 @@ namespace UDBus
         Message() = default;
         explicit Message(DBusMessage* msg) noexcept;
 
-        operator DBusMessage*() noexcept;
+        operator DBusMessage*() const noexcept;
 
         void new_1(int messageType) noexcept;
 
@@ -175,7 +175,7 @@ namespace UDBus
         void new_error_raw(DBusMessage* reply_to, const char* error_name, const char* error_message) noexcept;
 
         void copy(Message& reply_to) noexcept;
-        void copy(DBusMessage* reply_to) noexcept;
+        void copy(const DBusMessage* reply_to) noexcept;
 
         void ref(Message& reply_to) noexcept;
         void ref(DBusMessage* reply_to) noexcept;
@@ -186,12 +186,12 @@ namespace UDBus
 
         void pending_call_steal_reply(DBusPendingCall* pending) noexcept;
 
-        udbus_bool_t is_valid() noexcept;
+        [[nodiscard]] udbus_bool_t is_valid() const noexcept;
 
-        udbus_bool_t is_method_call(const char* iface, const char* method) noexcept;
-        udbus_bool_t is_signal(const char* iface, const char* method) noexcept;
+        udbus_bool_t is_method_call(const char* iface, const char* method) const noexcept;
+        udbus_bool_t is_signal(const char* iface, const char* method) const noexcept;
 
-        int get_type() noexcept;
+        [[nodiscard]] int get_type() const noexcept;
 
         // ostream style << operator. Simply calls append
         template<typename T>
@@ -201,11 +201,11 @@ namespace UDBus
             return *this;
         }
 
-        const char* get_error_name() noexcept;
-        udbus_bool_t set_error_name(const char* name) noexcept;
+        [[nodiscard]] const char* get_error_name() const noexcept;
+        udbus_bool_t set_error_name(const char* name) const noexcept;
 
         // Use this to pass to function arguments
-        DBusMessage* get() noexcept;
+        [[nodiscard]] DBusMessage* get() const noexcept;
 
         // Use this to assign to a function returning a raw dbus message pointer. It's preferred to use the
         // "UDBUS_GET_MESSAGE" macro, as it will make your code more concise and less syntax heavy
@@ -236,11 +236,11 @@ namespace UDBus
             // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
             if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
             {
-                void** f = (void**)t.data();
-                appendArrayBasic(Tag<T>::TypeString, (void*)f, t.size(), sizeof(T));
+                auto f = static_cast<void**>(t.data());
+                appendArrayBasic(Tag<T>::TypeString, static_cast<void*>(f), t.size(), sizeof(T));
             }
             else
-                appendArrayBasic(Tag<T>::TypeString, (void*)t.data(), t.size(), sizeof(T));
+                appendArrayBasic(Tag<T>::TypeString, static_cast<void*>(t.data()), t.size(), sizeof(T));
         }
 
         void setUserPointer(void* ptr) noexcept;
@@ -305,13 +305,13 @@ namespace UDBus
 #define CHECK_SUCCESS(x) auto result = x; if (result != RESULT_SUCCESS) return result
 
         template<typename TT>
-        MessageGetResult routeType(TT& t, UDBus::Iterator& it, int type, bool& bWasInitial, bool bAllocateStructs, bool bPopVariant) noexcept
+        MessageGetResult routeType(TT& t, UDBus::Iterator& it, int type, bool& bWasInitial, bool bAllocateStructs, const bool bPopVariant) noexcept
         {
             if constexpr (UDBus::is_specialisation_of<UDBus::Struct, TT>{})
             {
                 CHECK_SUCCESS(handleStructType(it, type, t, bWasInitial, bAllocateStructs));
             }
-            else if constexpr (std::is_same<Variant, TT>::value)
+            else if constexpr (std::is_same_v<Variant, TT>)
             {
                 if (bPopVariant)
                 {
@@ -330,7 +330,7 @@ namespace UDBus
             {
                 CHECK_SUCCESS(handleDictionaries(it, type, t, bWasInitial));
             }
-            else if constexpr (!std::is_same<IgnoreType, TT>::value && !std::is_same<BumpType, TT>::value)
+            else if constexpr (!std::is_same_v<IgnoreType, TT> && !std::is_same_v<BumpType, TT>)
             {
                 CHECK_SUCCESS(handleBasicType<TT>(it, type, &t));
             }
@@ -395,7 +395,7 @@ else                                                                            
         }
 
         template<typename T, typename ...T2>
-        MessageGetResult handleStructType(Iterator& it, int type, Struct<T, T2...>& s, bool bWasInitial, bool bAllocateArrayElements) noexcept
+        MessageGetResult handleStructType(Iterator& it, const int type, Struct<T, T2...>& s, const bool bWasInitial, const bool bAllocateArrayElements) noexcept
         {
             if (type == DBUS_TYPE_STRUCT)
             {
@@ -415,7 +415,7 @@ else                                                                            
         }
 
         template<typename TT>
-        MessageGetResult handleArray(Iterator& it, int type, TT& t, bool bWasInitial) noexcept
+        MessageGetResult handleArray(Iterator& it, const int type, TT& t, const bool bWasInitial) noexcept
         {
             if (type != DBUS_TYPE_ARRAY)
                 return RESULT_INVALID_ARRAY_TYPE;
@@ -435,7 +435,7 @@ else                                                                            
         }
 
         template<typename TT>
-        MessageGetResult handleDictionaries(Iterator& it, int type, TT& t, bool bWasInitial) noexcept
+        MessageGetResult handleDictionaries(Iterator& it, const int type, TT& t, const bool bWasInitial) noexcept
         {
             if (type != DBUS_TYPE_ARRAY)
                 return RESULT_INVALID_DICTIONARY_TYPE;
@@ -450,7 +450,7 @@ else                                                                            
                 const auto& el = t.emplace();
                 if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>())
                 {
-                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), (void *) &el.first->first));
+                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(&el.first->first)));
                 }
                 else
                     return RESULT_INVALID_DICTIONARY_KEY;
@@ -466,7 +466,7 @@ else                                                                            
             return RESULT_SUCCESS;
         }
 
-        MessageGetResult handleVariants(Iterator& current, Variant& data) noexcept;
+        MessageGetResult handleVariants(Iterator& current, const Variant& data) noexcept;
 
         bool bInitialGet = true;
     };
@@ -523,7 +523,7 @@ else                                                                            
             });
         }
 
-        Message& getMessage() noexcept;
+        [[nodiscard]] Message& getMessage() const noexcept;
 
         ~ArrayBuilder() noexcept;
     private:
@@ -555,32 +555,32 @@ else                                                                            
         Connection() = default;
         explicit Connection(DBusConnection* conn) noexcept;
 
-        operator DBusConnection*() noexcept;
+        operator DBusConnection*() const noexcept;
 
         void bus_get(DBusBusType type, Error& error) noexcept;
         void bus_get_private(DBusBusType type, Error& error) noexcept;
 
-        [[nodiscard]] int request_name(const char* name, unsigned int flags, Error& error) noexcept;
+        [[nodiscard]] int request_name(const char* name, unsigned int flags, Error& error) const noexcept;
 
-        udbus_bool_t read_write(int timeout_milliseconds) noexcept;
-        udbus_bool_t read_write_dispatch(int timeout_milliseconds) noexcept;
+        [[nodiscard]] udbus_bool_t read_write(int timeout_milliseconds) const noexcept;
+        [[nodiscard]] udbus_bool_t read_write_dispatch(int timeout_milliseconds) const noexcept;
 
-        Message pop_message() noexcept;
+        [[nodiscard]] Message pop_message() const noexcept;
 
         void open(const char* address, Error& error) noexcept;
         void open_private(const char* address, Error& error) noexcept;
 
-        void ref(Connection& conn) noexcept;
+        void ref(const Connection& conn) noexcept;
         void ref(DBusConnection* conn) noexcept;
 
-        void unref() noexcept;
-        void close() noexcept;
+        void unref() const noexcept;
+        void close() const noexcept;
 
-        void flush() noexcept;
+        void flush() const noexcept;
 
-        udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) noexcept;
-        udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) noexcept;
-        Message send_with_reply_and_block(Message& message, int timeout_milliseconds, Error& error) noexcept;
+        udbus_bool_t send(Message& message, dbus_uint32_t* client_serial) const noexcept;
+        udbus_bool_t send_with_reply(Message& message, PendingCall& pending_return, int timeout_milliseconds) const noexcept;
+        Message send_with_reply_and_block(Message& message, int timeout_milliseconds, Error& error) const noexcept;
 
         ~Connection() noexcept;
     private:
@@ -592,23 +592,23 @@ else                                                                            
     public:
         PendingCall() = default;
 
-        operator DBusPendingCall*() noexcept;
+        operator DBusPendingCall*() const noexcept;
         operator DBusPendingCall**() noexcept;
 
         void ref(DBusPendingCall* p) noexcept;
-        void ref(PendingCall& p) noexcept;
+        void ref(const PendingCall& p) noexcept;
 
         void unref() noexcept;
 
-        udbus_bool_t set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) noexcept;
+        udbus_bool_t set_notify(DBusPendingCallNotifyFunction function, void* user_data, DBusFreeFunction free_user_data) const noexcept;
 
-        void cancel() noexcept;
-        udbus_bool_t get_completed() noexcept;
+        void cancel() const noexcept;
+        [[nodiscard]] udbus_bool_t get_completed() const noexcept;
 
-        void block() noexcept;
+        void block() const noexcept;
 
-        udbus_bool_t set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) noexcept;
-        void* get_data(dbus_int32_t slot) noexcept;
+        udbus_bool_t set_data(dbus_int32_t slot, void* data, DBusFreeFunction free_data_func) const noexcept;
+        [[nodiscard]] void* get_data(dbus_int32_t slot) const noexcept;
 
         ~PendingCall() noexcept;
     private:

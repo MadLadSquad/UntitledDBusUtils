@@ -13,7 +13,7 @@ void UDBus::Message::setupContainer(UDBus::Iterator& it) noexcept
     bInitialGet = false;
 }
 
-void UDBus::Message::endContainer(bool bWasInitial) noexcept
+void UDBus::Message::endContainer(const bool bWasInitial) noexcept
 {
     if (!bInitialGet)
         iteratorStack.pop_back();
@@ -39,7 +39,7 @@ UDBus::BumpType& UDBus::bump() noexcept
     return i;
 }
 
-UDBus::MessageGetResult UDBus::Message::handleVariants(UDBus::Iterator& current, UDBus::Variant& data) noexcept
+UDBus::MessageGetResult UDBus::Message::handleVariants(UDBus::Iterator& current, const UDBus::Variant& data) noexcept
 {
     if (current.get_arg_type() != DBUS_TYPE_VARIANT)
         return RESULT_INVALID_VARIANT_TYPE;

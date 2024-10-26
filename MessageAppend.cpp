@@ -13,7 +13,7 @@ void UDBus::Message::appendGenericBasic(char type, void* data) noexcept
         }
         iteratorStack.back().append_basic(type, data);
     };
-    char tmp[2] = { type, '\0' }; // We just get a char here :/
+    const char tmp[2] = { type, '\0' }; // We just get a char here :/
 
     if (signatureAccumulationDepth > 0)
         handleContainerTypeWithInnerSignature(*this, tmp, f);
@@ -32,18 +32,18 @@ void UDBus::Message::appendArrayBasic(char type, void* data, size_t size, size_t
 
         auto& parent = iteratorStack.back();  // Standard iterators bullshit
         auto& child = iteratorStack.emplace_back(); // Push child
-        char signature[] = { type, '\0' };
+        const char signature[] = { type, '\0' };
 
         // Set append mode
         parent.setAppend(*this, DBUS_TYPE_ARRAY, signature, child, false);
         for (size_t i = 0; i < size; i++)
         {
-            void* tmp = (void*)((intptr_t)data + (i * typeSize));   // Evil pointer magic
+            const auto tmp = reinterpret_cast<void*>(reinterpret_cast<intptr_t>(data) + (i * typeSize));   // Evil pointer magic
             child.append_basic(type, tmp);// Append
         }
         handleClosingContainers(*this);
     };
-    char signature[] = { DBUS_TYPE_ARRAY, type, '\0' };
+    const char signature[] = { DBUS_TYPE_ARRAY, type, '\0' };
     if (signatureAccumulationDepth > 0)
         handleContainerTypeWithInnerSignature(*this, signature, f);
     else
@@ -62,13 +62,13 @@ UDBus::Message& UDBus::Message::BeginStruct(UDBus::Message& message, char type, 
     return message;
 }
 
-UDBus::Message& UDBus::Message::EndStruct(UDBus::Message& message, const char* type) noexcept
+UDBus::Message& UDBus::Message::EndStruct(UDBus::Message& message, const char* innerType) noexcept
 {
     const auto f = [&message]() -> void {
         handleClosingContainers(message);
     };
     if (message.signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(message, type, f);
+        handleContainerTypeWithInnerSignature(message, innerType, f);
     else
         f();
     return message;
@@ -97,7 +97,7 @@ UDBus::Message& UDBus::Message::EndVariant(UDBus::Message& message, std::string 
     return message;
 }
 
-void UDBus::Message::pushToIteratorStack(UDBus::Message& message, char type, const char* containedSignature) noexcept
+void UDBus::Message::pushToIteratorStack(UDBus::Message& message, const char type, const char* containedSignature) noexcept
 {
     // The following 3 lines do the following:
     // We create a boolean variable that is passed to setAppend and controls whether the container is initialised or
@@ -131,7 +131,7 @@ void UDBus::Message::handleClosingContainers(UDBus::Message& message) noexcept
         message.iteratorStack.pop_back(); // Pop parent only if it's the last iterator
 }
 
-UDBus::Message& UDBus::operator<<(UDBus::Message& message, UDBus::MessageManipulators manipulators) noexcept
+UDBus::Message& UDBus::operator<<(UDBus::Message& message, const UDBus::MessageManipulators manipulators) noexcept
 {
     switch (manipulators)
     {
