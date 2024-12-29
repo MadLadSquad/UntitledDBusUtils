@@ -4,7 +4,7 @@
  * nothing really compares to what I've written here. I sure hope this doesn't land in history as my magnum opus, but
  * who knows, I might even land on reddit :skull_emoji:
  *
- * I'm really sorry that you, for one reason or another, have to look at the internals of this god forsaken library.
+ * I'm really sorry that you, for one reason or another, have to look at the internals of this godforsaken library.
  * The fact is that without extreme use of templates and systems that work around the user's input to the library and
  * the underlying dbus-1 C API, easy interaction with dbus using official channels without using Gnome or QT libraries
  * is simply impossible in C++. I think that the reward is worth it, even if you, the reader of this file may not agree
@@ -224,7 +224,7 @@ namespace UDBus
         template<typename T>
         void append(const T& t) noexcept
         {
-            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
+            appendGenericBasic(Tag<T>::TypeString, static_cast<void*>(&t));
         }
 
         template<typename T>
@@ -236,7 +236,7 @@ namespace UDBus
             // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
             if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
             {
-                auto f = static_cast<void**>(t.data());
+                const auto f = static_cast<void**>(t.data());
                 appendArrayBasic(Tag<T>::TypeString, static_cast<void*>(f), t.size(), sizeof(T));
             }
             else
@@ -450,7 +450,9 @@ else                                                                            
                 const auto& el = t.emplace();
                 if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>())
                 {
-                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(&el.first->first)));
+                    // I fucking hate the C++ standard library sometimes. You need to do a const_cast to the key type because they decided that using
+                    // for (auto& a : map) should make std::pair<const key_type, value_type> instead of just std::pair<key_type, value_type>.
+                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(const_cast<typename TT::key_type*>(&el.first->first))));
                 }
                 else
                     return RESULT_INVALID_DICTIONARY_KEY;

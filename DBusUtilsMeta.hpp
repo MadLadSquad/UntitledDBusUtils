@@ -27,7 +27,7 @@ namespace UDBus
 {
     // Casual forward declarations
     struct Variant;
-    struct Iterator;
+    class Iterator;
 
     template<typename T>
     struct ContainerVariantTemplate;
