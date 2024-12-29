@@ -39,8 +39,7 @@ jobs:
           git submodule update --remote --merge --init --recursive
           ver="${{ github.ref_name }}"
           sed -i "s/project(UntitledDBusUtils.*/project(UntitledDBusUtils VERSION ${ver:1})/g" CMakeLists.txt
-          git add . && git commit -m "Automatically bump version" && git push origin HEAD:master
-
+          (git add . && git commit -m "Automatically bump version" && git push origin HEAD:master) || echo "Nothing to commit"
       - name: Create archive
         shell: bash
         run: |
