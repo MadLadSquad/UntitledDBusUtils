@@ -224,7 +224,8 @@ namespace UDBus
         template<typename T>
         void append(const T& t) noexcept
         {
-            appendGenericBasic(Tag<T>::TypeString, static_cast<void*>(&t));
+            // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
+            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
         }
 
         template<typename T>
@@ -450,9 +451,8 @@ else                                                                            
                 const auto& el = t.emplace();
                 if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>())
                 {
-                    // I fucking hate the C++ standard library sometimes. You need to do a const_cast to the key type because they decided that using
-                    // for (auto& a : map) should make std::pair<const key_type, value_type> instead of just std::pair<key_type, value_type>.
-                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(const_cast<typename TT::key_type*>(&el.first->first))));
+                    // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
+                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), (void*)&el.first->first));
                 }
                 else
                     return RESULT_INVALID_DICTIONARY_KEY;
