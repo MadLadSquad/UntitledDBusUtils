@@ -51,6 +51,12 @@ jobs:
       - name: Create archive
         shell: bash
         run: |
+          rm -rf .git/
+
+          mkdir "${{ steps.mod.outputs.out }}" || exit
+          mv * ${{ steps.mod.outputs.out }}/ || echo "Errors in move"
+          mv .* "${{ steps.mod.outputs.out }}" || echo "Errors in move"
+
           tar cfJ ${{ steps.mod.outputs.out }}.tar.xz ${{ steps.mod.outputs.out }} || echo "Might have failed"
       - name: Create Release
         uses: softprops/action-gh-release@v2
