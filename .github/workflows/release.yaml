@@ -40,14 +40,9 @@ jobs:
           ver="${{ github.ref_name }}"
 
           echo "out=untitled-dbus-utils-${ver:1}" >> $GITHUB_OUTPUT
-          mkdir "${{ steps.mod.outputs.out }}" || exit
 
           sed -i "s/project(UntitledDBusUtils.*/project(UntitledDBusUtils VERSION ${ver:1})/g" CMakeLists.txt
           (git add . && git commit -m "Automatically bump version" && git push origin HEAD:master) || echo "Nothing to commit"
-
-          rm -rf .git/
-          mv * ${{ steps.mod.outputs.out }}/ || echo "Errors in move"
-          mv .* "${{ steps.mod.outputs.out }}" || echo "Errors in move"
       - name: Create archive
         shell: bash
         run: |
