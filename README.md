@@ -18,4 +18,4 @@ C++ Utilities for dealing with the low level C DBus API. Features:
 1. Additional pointer checks to prevent segmentation faults that are common when using dbus-1
 
 ## Learning
-All documentation can be found on the [wiki](https://github.com/MadLadSquad/UntitledDBusUtils).
+All documentation can be found on the [wiki](https://github.com/MadLadSquad/UntitledDBusUtils/wiki/).
