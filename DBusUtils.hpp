@@ -2,13 +2,16 @@
  * Hello everyone, I'm Stanislav Vasilev(Madman10K) and I welcome you to the worst library I have ever created.
  * Previously, I had some experience working with templates and designing wrappers around other libraries, however,
  * nothing really compares to what I've written here. I sure hope this doesn't land in history as my magnum opus, but
- * who knows, I might even land on reddit :skull_emoji:
+ * who knows :skull_emoji:
  *
  * I'm really sorry that you, for one reason or another, have to look at the internals of this godforsaken library.
  * The fact is that without extreme use of templates and systems that work around the user's input to the library and
  * the underlying dbus-1 C API, easy interaction with dbus using official channels without using Gnome or QT libraries
- * is simply impossible in C++. I think that the reward is worth it, even if you, the reader of this file may not agree
- * with me. I completely understand and empathise with you and wish you well on your endeavours. May God be with you!
+ * is simply impossible in C++. Of course, I can write my own library using some nice low level networking library,
+ * but I decided to just go bananas here. I think that the reward is worth it, even if you, the reader of this file 
+ * may not agree with me. I completely understand and empathise with you and wish you well on your endeavours. 
+ *
+ * May God be with you!
  */
 
 #pragma once
