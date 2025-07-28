@@ -45,7 +45,7 @@ UDBus::MessageGetResult UDBus::Message::handleVariants(UDBus::Iterator& current,
         return RESULT_INVALID_VARIANT_TYPE;
 
     setupContainer(current);
-    if (!data.f(iteratorStack.back(), userPointer))
+    if (!data.parse(*this, iteratorStack.back(), const_cast<void**>(&data.data), userPointer))
         return RESULT_INVALID_VARIANT_PARSING;
     endContainer(bInitialGet);
     return RESULT_SUCCESS;

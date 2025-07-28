@@ -8,8 +8,8 @@
  * The fact is that without extreme use of templates and systems that work around the user's input to the library and
  * the underlying dbus-1 C API, easy interaction with dbus using official channels without using Gnome or QT libraries
  * is simply impossible in C++. Of course, I can write my own library using some nice low level networking library,
- * but I decided to just go bananas here. I think that the reward is worth it, even if you, the reader of this file 
- * may not agree with me. I completely understand and empathise with you and wish you well on your endeavours. 
+ * but I decided to just go bananas here for absolutely no reason. I think that the reward is worth it, even if you,
+ * the reader of this file may not agree with me. I completely understand and empathise with you and wish you well.
  *
  * May God be with you!
  */
@@ -228,7 +228,7 @@ namespace UDBus
         void append(const T& t) noexcept
         {
             // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
-            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
+            appendGenericBasic(Tag<T>::TypeString, static_cast<void*>(&t));
         }
 
         template<typename T>
@@ -250,20 +250,26 @@ namespace UDBus
         void setUserPointer(void* ptr) noexcept;
 
         template<typename T, typename... T2>
-        MessageGetResult handleMessage(Type<T, T2...>& t) noexcept
+        MessageGetResult handleMessage(Type<T, T2...>& t, UDBus::Iterator* iterator = nullptr) noexcept
         {
-            iteratorStack.clear();
-            bInitialGet = true;
+            if (iterator == nullptr)
+            {
+                iteratorStack.clear();
+                bInitialGet = true;
 
-            auto& latest = iteratorStack.emplace_back();
-            auto& last = iteratorStack.emplace_back();
+                auto& latest = iteratorStack.emplace_back();
+                auto& last = iteratorStack.emplace_back();
+                latest.setGet(*this, &last, true);
+            }
 
-            latest.setGet(*this, &last, true);
             auto result = handleMethodCallInternal(t);
 
-            iteratorStack.clear();
-            variantStack.clear();
-            bInitialGet = true;
+            if (iterator == nullptr)
+            {
+                iteratorStack.clear();
+                variantStack.clear();
+                bInitialGet = true;
+            }
 
             return result;
         }
@@ -320,6 +326,9 @@ namespace UDBus
                 if (bPopVariant)
                 {
                     CHECK_SUCCESS(handleVariants(it, *variantStack.back()));
+                    // Don't forget that variant templates just store a template so we have to make a copy every time
+                    // if we want our data to persist
+                    t = *variantStack.back();
                 }
                 else
                 {
@@ -346,15 +355,16 @@ namespace UDBus
             return RESULT_SUCCESS;
         }
 
-#define HANDLE_CONTAINER_VARIANT_TEMPLATES(x, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant)    if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})    \
-{                                                                                                                                                                                       \
-    auto& p = x;                                                                                                                                                                        \
-    variantStack.emplace_back((x).v);                                                                                                                                \
-    CHECK_SUCCESS(routeType(x->t, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant));                                                                                            \
-}                                                                                                                                                                                       \
-else                                                                                                                                                                                    \
-{                                                                                                                                                                                       \
-    CHECK_SUCCESS(routeType(x, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant));                                                                                               \
+#define HANDLE_CONTAINER_VARIANT_TEMPLATES(x, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant)  \
+if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})                              \
+{                                                                                                       \
+    auto& p = x;                                                                                        \
+    variantStack.emplace_back((x).v);                                                                   \
+    CHECK_SUCCESS(routeType(x->t, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant));            \
+}                                                                                                       \
+else                                                                                                    \
+{                                                                                                       \
+    CHECK_SUCCESS(routeType(x, itt, typee, bWasInitiall, bAllocateStructs, bPopVariant));               \
 }
 
         DECLARE_TYPE_AND_STRUCT(MessageGetResult, handleMethodCallInternal, t, {
@@ -379,8 +389,18 @@ else                                                                            
                 else if (!std::is_same<BumpType, TT>::value)
                     return RESULT_MORE_FIELDS_THAN_REQUIRED;
             }
-            else if (t.next() != nullptr)
-                return RESULT_LESS_FIELDS_THAN_REQUIRED;
+            // Return this error if all of these evaluate to true:
+            // 1. There is no data in the data stream but there is data in the structure
+            // 2. The item is not a bump type
+            // 3. The next item is not a bump type with checks for both Type<BumpType> and Struct<BumpType>
+            //
+            // Fun fact: it might seem more intuitive to dereference next as in `decltype(t.next())` and then checking
+            // against Type<BumpType>/Struct<BumpType>, however, next is market as a constexpr function, which means
+            // that since it returns nullptr the resulting type will not be any of the 2 expected types, but rather
+            // std::nullptr_t. This took me 1.5 hours to debug... If only I were paid to develop this project...
+            else if (t.next() != nullptr && !std::is_same<BumpType, TT>::value)
+                if constexpr (!std::is_same<decltype(t.next()), Type<BumpType>*>::value && !std::is_same<decltype(t.next()), Struct<BumpType>*>::value)
+                    return RESULT_LESS_FIELDS_THAN_REQUIRED;
 
             if constexpr (UDBus::is_specialisation_of<ContainerVariantTemplate, TT>{})
                 variantStack.pop_back();
@@ -454,8 +474,11 @@ else                                                                            
                 const auto& el = t.emplace();
                 if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>())
                 {
-                    // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
-                    CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), (void*)&el.first->first));
+                    if (!std::is_same_v<IgnoreType, TT> && !std::is_same_v<BumpType, TT>)
+                    {
+                        // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
+                        CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(&el.first->first)));
+                    }
                 }
                 else
                     return RESULT_INVALID_DICTIONARY_KEY;

@@ -18,9 +18,11 @@
 // Use this instead of dbus_bool_t
 struct udbus_bool_t
 {
+    udbus_bool_t() noexcept = default;
     udbus_bool_t(dbus_bool_t dbus) noexcept;
     operator bool() const noexcept;
-    dbus_bool_t b;
+
+    dbus_bool_t b{};
 };
 
 namespace UDBus
@@ -34,37 +36,51 @@ namespace UDBus
 
     // Go around the C++ type system using Tag dispatching. This struct will have specialisations for all types we
     // want to support. Check the macro below
-    template<typename T>
+    template<typename T, typename = void>
     struct Tag;
 
+    // Disallow types
+    #define DISALLOW_TAG(x, y)                            \
+    template<typename T>                                  \
+    struct Tag<T, std::enable_if_t<std::is_same_v<T, x>>> \
+    {                                                     \
+        static_assert(!std::is_same_v<T, x>, y);          \
+    };
+
+    DISALLOW_TAG(float, "DBus does not support 4-byte floating point numbers. Use doubles instead.");
+    DISALLOW_TAG(bool, "We do not support normal boolean types. Use udbus_bool_t instead.");
+
     // Specialises the Tag struct with a type definition and a constexpr string that represents the type
-    #define MAKE_FUNC_BASIC(x, y) template<> struct Tag<x> { using Type = x; static constexpr char TypeString = y; }
+    #define MAKE_TAG(x, y) template<> struct Tag<x> { using Type = x; static constexpr char TypeString = y; }
 
-    MAKE_FUNC_BASIC(const char*,                    DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(char*,                          DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(int8_t,                         DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(uint8_t,                        DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(dbus_int16_t,                   DBUS_TYPE_INT16     );
-    MAKE_FUNC_BASIC(dbus_uint16_t,                  DBUS_TYPE_UINT16    );
-    MAKE_FUNC_BASIC(dbus_int32_t,                   DBUS_TYPE_INT32     );
-    MAKE_FUNC_BASIC(dbus_uint32_t,                  DBUS_TYPE_UINT32    );
-    // uint32_t before bool because bool is an uint32. Retarded af fr
-    MAKE_FUNC_BASIC(udbus_bool_t,                   DBUS_TYPE_BOOLEAN   );
-    MAKE_FUNC_BASIC(dbus_int64_t,                   DBUS_TYPE_INT64     );
-    MAKE_FUNC_BASIC(dbus_uint64_t,                  DBUS_TYPE_UINT64    );
+    MAKE_TAG(const char*,                    DBUS_TYPE_STRING    );
+    MAKE_TAG(char*,                          DBUS_TYPE_STRING    );
+    MAKE_TAG(int8_t,                         DBUS_TYPE_BYTE      );
+    MAKE_TAG(uint8_t,                        DBUS_TYPE_BYTE      );
+    MAKE_TAG(dbus_int16_t,                   DBUS_TYPE_INT16     );
+    MAKE_TAG(dbus_uint16_t,                  DBUS_TYPE_UINT16    );
+    MAKE_TAG(dbus_int32_t,                   DBUS_TYPE_INT32     );
+    MAKE_TAG(dbus_uint32_t,                  DBUS_TYPE_UINT32    );
+    // uint32_t before bool because bool is an uint32!??!?!?!?!?
+    MAKE_TAG(udbus_bool_t,                   DBUS_TYPE_BOOLEAN   );
+    MAKE_TAG(dbus_int64_t,                   DBUS_TYPE_INT64     );
+    MAKE_TAG(dbus_uint64_t,                  DBUS_TYPE_UINT64    );
+    
+    // There is no floating point type, instead use doubles
+    MAKE_TAG(double,                         DBUS_TYPE_DOUBLE    );
 
-    MAKE_FUNC_BASIC(std::vector<const char*>,       DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(std::vector<char*>,             DBUS_TYPE_STRING    );
-    MAKE_FUNC_BASIC(std::vector<int8_t>,            DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(std::vector<uint8_t>,           DBUS_TYPE_BYTE      );
-    MAKE_FUNC_BASIC(std::vector<dbus_int16_t>,      DBUS_TYPE_INT16     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint16_t>,     DBUS_TYPE_UINT16    );
-    MAKE_FUNC_BASIC(std::vector<dbus_int32_t>,      DBUS_TYPE_INT32     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint32_t>,     DBUS_TYPE_UINT32    );
-    // uint32_t before bool again. I hate this fucking library
-    MAKE_FUNC_BASIC(std::vector<udbus_bool_t>,      DBUS_TYPE_BOOLEAN   );
-    MAKE_FUNC_BASIC(std::vector<dbus_int64_t>,      DBUS_TYPE_INT64     );
-    MAKE_FUNC_BASIC(std::vector<dbus_uint64_t>,     DBUS_TYPE_UINT64    );
+    MAKE_TAG(std::vector<const char*>,       DBUS_TYPE_STRING    );
+    MAKE_TAG(std::vector<char*>,             DBUS_TYPE_STRING    );
+    MAKE_TAG(std::vector<int8_t>,            DBUS_TYPE_BYTE      );
+    MAKE_TAG(std::vector<uint8_t>,           DBUS_TYPE_BYTE      );
+    MAKE_TAG(std::vector<dbus_int16_t>,      DBUS_TYPE_INT16     );
+    MAKE_TAG(std::vector<dbus_uint16_t>,     DBUS_TYPE_UINT16    );
+    MAKE_TAG(std::vector<dbus_int32_t>,      DBUS_TYPE_INT32     );
+    MAKE_TAG(std::vector<dbus_uint32_t>,     DBUS_TYPE_UINT32    );
+    // Bool should always be after uint32_t
+    MAKE_TAG(std::vector<udbus_bool_t>,      DBUS_TYPE_BOOLEAN   );
+    MAKE_TAG(std::vector<dbus_int64_t>,      DBUS_TYPE_INT64     );
+    MAKE_TAG(std::vector<dbus_uint64_t>,     DBUS_TYPE_UINT64    );
 
     template <template <typename...> class Base, typename T>
     struct is_specialisation_of : std::false_type {};
@@ -90,6 +106,8 @@ namespace UDBus
     template<typename T>
     constexpr bool is_array_type() noexcept;
 
+    // These macros are needed because I couldn't find a clean way of creating a function that has
+    // the same body but supports getting both a Struct and a Type
     #define DECLARE_TYPE_AND_STRUCT_ADDITIONAL(return_type, name, arg_name, additional_arg, body)   \
     template<typename TT, typename... TT2>                                                          \
     return_type name##Struct(UDBus::Struct<TT, TT2...>& arg_name, additional_arg) noexcept body     \
@@ -109,6 +127,7 @@ namespace UDBus
         char data = 0;
     };
 
+    // Use this if you don't want or need the information in a certain field of the message
     IgnoreType& ignore() noexcept;
 
     struct BumpType
@@ -116,8 +135,13 @@ namespace UDBus
         char data = 0;
     };
 
+    // Hack to support single-field messages
     BumpType& bump() noexcept;
 
+// Simplifies the code a bit
+#define UDBUS_FREE_TYPE(x) decltype(x)::destroy(x)
+
+    // The Type compile-time tree which is used to build the schema
     template<typename T, typename... T2>
     class Type
     {
@@ -161,8 +185,8 @@ namespace UDBus
         template<typename TT>
         static void routeDestroy(TT& t, bool& bWasInArrayOrMap, bool& bDestroyEverything) noexcept
         {
-            bool bParentIsArrayOrMap = bWasInArrayOrMap;
-            bool bParentShouldDestroyEverything = bDestroyEverything;
+            const bool bParentIsArrayOrMap = bWasInArrayOrMap;
+            const bool bParentShouldDestroyEverything = bDestroyEverything;
             if constexpr (is_specialisation_of<Struct, TT>{})
             {
                 if (t.bShouldBeFreed || t.bIsOrigin)
@@ -255,6 +279,7 @@ namespace UDBus
         T* data = nullptr;
     };
 
+    // The Struct compile-time tree that is used for nested structures
     template<typename T, typename... T2>
     class Struct : public Type<T, T2...>
     {
@@ -267,7 +292,7 @@ namespace UDBus
     };
 
     template<typename T>
-    struct Struct<T> : public Type<T>
+    class Struct<T> : public Type<T>
     {
     public:
         Struct() noexcept = default;
@@ -277,6 +302,7 @@ namespace UDBus
         bool bIsOrigin = false;
     };
 
+    // Allocates a new structure for building inline schemas
     template<typename T, typename... T2>
     Struct<T, T2...>& makeStruct(Struct<T, T2...>&& t) noexcept
     {
@@ -284,13 +310,20 @@ namespace UDBus
         return *tmp;
     }
 
+    class Message;
+
     struct Variant
     {
-        std::function<bool(Iterator&, void*)> f = [](Iterator&, void*) -> bool { return true; };
+        std::function<bool(Message&, Iterator&, void**, void*)> parse = [](Message&, Iterator&, void**, void*) -> bool { return true; };
+        void* data = nullptr;
     };
 
     Variant& makeVariant(Variant&& v) noexcept;
 
+    // Since variants can be part of a container it's important that we allow for a dynamic way
+    // to allocate these variants but still associate them with some user-defined function.
+    // This type allows us to push a variant template that we can allocate for every element
+    // of the container
     template<typename T>
     struct ContainerVariantTemplate
     {
