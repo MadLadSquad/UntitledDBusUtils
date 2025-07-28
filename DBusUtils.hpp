@@ -477,7 +477,7 @@ else                                                                            
                     if (!std::is_same_v<IgnoreType, TT> && !std::is_same_v<BumpType, TT>)
                     {
                         // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
-                        CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), static_cast<void*>(&el.first->first)));
+                        CHECK_SUCCESS(handleBasicType<typename TT::key_type>(nit, nit.get_arg_type(), (void*)&el.first->first));
                     }
                 }
                 else
