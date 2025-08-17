@@ -1,158 +1,216 @@
 #include "DBusUtils.hpp"
 
-
-void UDBus::Message::appendGenericBasic(char type, void* data) noexcept
+UDBus::MessageBuilder::MessageBuilder(Message& msg) noexcept
 {
-    const auto f = [this, type, data]() -> void {
-        if (iteratorStack.empty())
+    setMessage(msg);
+}
+
+void UDBus::MessageBuilder::setMessage(Message& msg) noexcept
+{
+    this->message = &msg;
+    if (nodeStack.empty())
+        nodeStack.push(&node);
+}
+
+void UDBus::MessageBuilder::appendGenericBasic(char type, void* data) const noexcept
+{
+    const auto f = [type, data, this](const AppendNode&) -> void
+    {
+        // If the iterator stack is empty it means that we can freely append to a generic iterator
+        if (message->iteratorStack.empty())
         {
             DBusMessageIter iter;
-            dbus_message_iter_init_append(message, &iter);
+            dbus_message_iter_init_append(message->get(), &iter);
             dbus_message_iter_append_basic(&iter, type, data);
             return;
         }
-        iteratorStack.back().append_basic(type, data);
+        // Else append to the deepest iterator always
+        message->iteratorStack.back().append_basic(type, data);
     };
-    const char tmp[2] = { type, '\0' }; // We just get a char here :/
-
-    if (signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(*this, tmp, f);
+    const char signature[2] = { type, '\0' };
+    if (layerDepth > 0)
+    {
+        nodeStack.top()->children.emplace_back(AppendNode{
+            .children = {},
+            .event = f,
+            .signature = signature
+        });
+    }
     else
-        f();
+        f(*nodeStack.top());
 }
 
-void UDBus::Message::appendArrayBasic(char type, void* data, size_t size, size_t typeSize) noexcept
+void UDBus::MessageBuilder::appendArrayBasic(char type, void* data, size_t n, size_t size) const noexcept
 {
-    const auto f = [type, data, this, size, typeSize]() -> void {
-        if (iteratorStack.empty())
+    const auto f = [type, data, n, size, this](const AppendNode&) -> void
+    {
+        // If the iterator stack is empty we can append the array directly
+        if (message->iteratorStack.empty())
         {
-            dbus_message_append_args(message, DBUS_TYPE_ARRAY, type, &data, size, DBUS_TYPE_INVALID);
+            dbus_message_append_args(message->get(), DBUS_TYPE_ARRAY, type, &data, n, DBUS_TYPE_INVALID);
             return;
         }
 
-        auto& parent = iteratorStack.back();  // Standard iterators bullshit
-        auto& child = iteratorStack.emplace_back(); // Push child
+        // Otherwise, get the parent iterator and create a child iterator
+        auto& parent = message->iteratorStack.back();
+        auto& child = message->iteratorStack.emplace_back();
         const char signature[] = { type, '\0' };
 
-        // Set append mode
-        parent.setAppend(*this, DBUS_TYPE_ARRAY, signature, child, false);
-        for (size_t i = 0; i < size; i++)
+        // Assign the child to the parent
+        parent.setAppend(*message, DBUS_TYPE_ARRAY, signature, child, false);
+        for (size_t i = 0; i < n; i++)
         {
-            const auto tmp = reinterpret_cast<void*>(reinterpret_cast<intptr_t>(data) + (i * typeSize));   // Evil pointer magic
-            child.append_basic(type, tmp);// Append
+            // Evil pointer magic to iterate a typeless array without template arguments
+            const auto tmp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(data) + (i * size));
+            child.append_basic(type, tmp);
         }
-        handleClosingContainers(*this);
+        closeContainers();
     };
+
     const char signature[] = { DBUS_TYPE_ARRAY, type, '\0' };
-    if (signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(*this, signature, f);
+    if (layerDepth > 0)
+    {
+        nodeStack.top()->children.emplace_back(AppendNode{
+            .children = {},
+            .event = f,
+            .signature = signature
+        });
+    }
     else
-        f();
+        f(*nodeStack.top());
 }
 
-UDBus::Message& UDBus::Message::BeginStruct(UDBus::Message& message, char type, const char* innerType) noexcept
+void UDBus::MessageBuilder::appendStructureEvent(const char type, const char* containedSignature) const noexcept
 {
-    const auto f = [&message, type]() -> void {
-        pushToIteratorStack(message, type, nullptr);
-    };
-    if (message.signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(message, innerType, f);
-    else
-        f();
-    return message;
-}
-
-UDBus::Message& UDBus::Message::EndStruct(UDBus::Message& message, const char* innerType) noexcept
-{
-    const auto f = [&message]() -> void {
-        handleClosingContainers(message);
-    };
-    if (message.signatureAccumulationDepth > 0)
-        handleContainerTypeWithInnerSignature(message, innerType, f);
-    else
-        f();
-    return message;
-}
-
-UDBus::Message& UDBus::Message::BeginVariant(UDBus::Message& message) noexcept
-{
-    message.signatureAccumulationDepth++;   // Increase the depth of the variant because variants can be nested
-    message.eventList.emplace_back();       // Add new events list
-    return message;
-}
-
-UDBus::Message& UDBus::Message::EndVariant(UDBus::Message& message, std::string containedSignature) noexcept
-{
-    // We only get an empty signature if we're appending to the message directly(not using ArrayBuilder)
-    if (containedSignature.empty())
-        containedSignature = message.eventList[message.signatureAccumulationDepth - 1].first;
-
-    pushToIteratorStack(message, DBUS_TYPE_VARIANT, containedSignature.c_str());
-    for (auto& a : message.eventList[message.signatureAccumulationDepth - 1].second)
-        a();
-
-    message.signatureAccumulationDepth--;
-    handleClosingContainers(message);
-    message.eventList.pop_back();
-    return message;
-}
-
-void UDBus::Message::pushToIteratorStack(UDBus::Message& message, const char type, const char* containedSignature) noexcept
-{
-    // The following 3 lines do the following:
-    // We create a boolean variable that is passed to setAppend and controls whether the container is initialised or
-    // simply opened. Types that require a contained_signature should always be opened, since their container is already
-    // a root iterator in all cases, so we set it to false in that case directly.
-    //
-    // We make it true, only when the container doesn't require a contained signature and is the iterator is added to
-    // the root of the dbus arguments tree. This mostly happens when appending structs to the root of the message call.
     bool bRootIterator = false;
-    if (message.iteratorStack.empty())
+    auto& stack = message->iteratorStack;
+    if (stack.empty())
         bRootIterator = true;
 
-    auto& parent = bRootIterator ? message.iteratorStack.emplace_back() : message.iteratorStack.back();
-    auto& child = message.iteratorStack.emplace_back();
+    auto& parent = bRootIterator ? stack.emplace_back() : stack.back();
+    auto& child = stack.emplace_back();
 
-    parent.setAppend(message, type, containedSignature, child, bRootIterator);
+    parent.setAppend(*message, type, containedSignature, child, bRootIterator);
 }
 
-void UDBus::Message::handleContainerTypeWithInnerSignature(UDBus::Message& message, const char* type, const std::function<void(void)>& f) noexcept
+void UDBus::MessageBuilder::sendMessage(AppendNode& node) noexcept
 {
-    auto& ref = message.eventList[message.signatureAccumulationDepth - 1];
-    ref.first += type;
-    ref.second.emplace_back(f);
+    node.event(node);
+    for (auto& a : node.children)
+        sendMessage(a);
 }
 
-void UDBus::Message::handleClosingContainers(UDBus::Message& message) noexcept
+void UDBus::MessageBuilder::getSignature(AppendNode& node, std::string& signature) noexcept
 {
-    (message.iteratorStack.end() - 2)->close_container(); // Close parent first
-    message.iteratorStack.pop_back(); // Pop child, this will close it too
-    if (message.iteratorStack.size() == 1)
-        message.iteratorStack.pop_back(); // Pop parent only if it's the last iterator
+    if (node.bIgnore && node.signature.empty())
+        return;
+
+    if (node.signature[0] == DBUS_TYPE_VARIANT)
+        signature += DBUS_TYPE_VARIANT_AS_STRING;
+    else if (node.signature == DBUS_TYPE_STRUCT_AS_STRING)
+        signature += DBUS_STRUCT_BEGIN_CHAR_AS_STRING;
+    else if (node.signature == DBUS_TYPE_DICT_ENTRY_AS_STRING)
+        signature += DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING;
+    else
+        signature += node.signature;
+
+    for (auto& a : node.children)
+        getSignature(a, node.signature[0] == DBUS_TYPE_VARIANT ? node.innerSignature : signature);
+
+
+    if (node.signature == DBUS_TYPE_STRUCT_AS_STRING)
+        signature += DBUS_STRUCT_END_CHAR_AS_STRING;
+    else if (node.signature == DBUS_TYPE_DICT_ENTRY_AS_STRING)
+        signature += DBUS_DICT_ENTRY_END_CHAR_AS_STRING;
+    else if (node.signature == DBUS_TYPE_ARRAY_AS_STRING)
+        signature += node.innerSignature;
 }
 
-UDBus::Message& UDBus::operator<<(UDBus::Message& message, const UDBus::MessageManipulators manipulators) noexcept
-{
-    switch (manipulators)
-    {
-        case BeginStruct:
-            return Message::BeginStruct(message);
-        case EndStruct:
-            return Message::EndStruct(message);
-        case BeginVariant:
-            return Message::BeginVariant(message);
-        case EndVariant:
-            return Message::EndVariant(message);
-        default:
-            return message;
+#define BEGIN_GENERIC_STRUCTURE(type, typeString, containedSignature)               \
+    {                                                                               \
+        auto& a = nodeStack.top()->children.emplace_back(AppendNode{                \
+            .children = {},                                                         \
+            .event = [this](const AppendNode& n) -> void                            \
+            {                                                                       \
+                appendStructureEvent(type, containedSignature);                     \
+            },                                                                      \
+            .signature = typeString,                                                \
+        });                                                                         \
+        nodeStack.push(&a);                                                         \
+        layerDepth++;                                                               \
     }
+
+template <>
+UDBus::MessageBuilder& UDBus::MessageBuilder::append<UDBus::MessageManipulators>(const MessageManipulators& op) noexcept
+{
+    switch (op)
+    {
+    case BeginStruct:
+        BEGIN_GENERIC_STRUCTURE(DBUS_TYPE_STRUCT, DBUS_TYPE_STRUCT_AS_STRING, nullptr);
+        break;
+    case EndStruct:
+        endStructure();
+        break;
+
+    case BeginVariant:
+        BEGIN_GENERIC_STRUCTURE(DBUS_TYPE_VARIANT, DBUS_TYPE_VARIANT_AS_STRING, n.innerSignature.c_str());
+        break;
+    case EndVariant:
+        for (auto& a : nodeStack.top()->children)
+            getSignature(a, nodeStack.top()->innerSignature);
+        endStructure();
+        break;
+
+    case BeginArray:
+        BEGIN_GENERIC_STRUCTURE(DBUS_TYPE_ARRAY, DBUS_TYPE_ARRAY_AS_STRING, n.innerSignature.c_str());
+        break;
+    case Next:
+        nodeStack.top()->innerSignature.clear();
+        break;
+    case EndArray:
+        for (auto& a : nodeStack.top()->children)
+            getSignature(a, nodeStack.top()->innerSignature);
+        endStructure();
+        break;
+
+
+    case BeginDictEntry:
+        BEGIN_GENERIC_STRUCTURE(DBUS_TYPE_DICT_ENTRY, DBUS_TYPE_DICT_ENTRY_AS_STRING, nullptr);
+        break;
+
+    case EndDictEntry:
+        endStructure();
+        break;
+
+    case EndMessage:
+        sendMessage(node);
+        break;
+    default:
+        break;
+    }
+    return *this;
 }
 
-template<>
-void UDBus::Message::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept
+void UDBus::MessageBuilder::closeContainers() const noexcept
 {
-    pushToIteratorStack(*this, DBUS_TYPE_ARRAY, t.signature.c_str());
-    for (auto& a : t.eventList)
-        a();
-    handleClosingContainers(*this);
+    (message->iteratorStack.end() - 2)->close_container(); // Close parent first
+    message->iteratorStack.pop_back(); // Pop child, this will close it too
+    if (message->iteratorStack.size() == 1)
+        message->iteratorStack.pop_back(); // Pop parent only if it's the last iterator
+}
+
+void UDBus::MessageBuilder::endStructure() noexcept
+{
+    nodeStack.top()->children.emplace_back(AppendNode
+    {
+        .children = {},
+        .event = [this](const AppendNode&) -> void
+        {
+            closeContainers();
+        },
+        .signature = {},
+        .bIgnore = true
+    });
+    nodeStack.pop();
+    layerDepth--;
 }

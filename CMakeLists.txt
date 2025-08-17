@@ -20,7 +20,7 @@ link_directories(${DBUS_LIBRARY_DIRS})
 set(UDBUS_HEADERS "DBusUtils.hpp" "DBusUtilsMeta.hpp")
 
 add_library(UntitledDBusUtils ${UDBUS_LIBRARY_TYPE} Connection.cpp DBusUtils.cpp Error.cpp Iterator.cpp Message.cpp
-        PendingCall.cpp ArrayBuilder.cpp MessageAppend.cpp MessageGet.cpp ${UDBUS_HEADERS})
+        PendingCall.cpp MessageAppend.cpp MessageGet.cpp ${UDBUS_HEADERS})
 
 include_directories(${DBUS_INCLUDE_DIRS})
 target_include_directories(UntitledDBusUtils PUBLIC ${DBUS_INCLUDE_DIRS})

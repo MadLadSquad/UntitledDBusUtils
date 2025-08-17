@@ -17,12 +17,12 @@ UDBus::Iterator::Iterator(UDBus::Message& message, const int type, const char* c
 
 bool UDBus::Iterator::append_basic(const int type, const void* value) noexcept
 {
-    return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_basic(&iterator, type, value);
+    return dbus_message_iter_append_basic(&iterator, type, value);
 }
 
 bool UDBus::Iterator::append_fixed_array(const int element_type, const void* value, const int n_elements) noexcept
 {
-    return iteratorType == APPEND_ITERATOR && dbus_message_iter_append_fixed_array(&iterator, element_type, value, n_elements);
+    return dbus_message_iter_append_fixed_array(&iterator, element_type, value, n_elements);
 }
 
 void UDBus::Iterator::close_container() noexcept

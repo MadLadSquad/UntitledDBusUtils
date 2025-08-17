@@ -16,6 +16,7 @@
 
 #pragma once
 #include "DBusUtilsMeta.hpp"
+#include <stack>
 
 #define UDBUS_GET_MESSAGE(x) *(x).getMessagePointer()
 
@@ -119,20 +120,91 @@ namespace UDBus
     {
         BeginStruct,
         EndStruct,
+
         BeginVariant,
-        EndVariant
-    };
+        EndVariant,
 
-    enum ArrayBuilderManipulators
-    {
+        BeginArray,
         Next,
+        EndArray,
+
         BeginDictEntry,
-        EndDictEntry
+        EndDictEntry,
+
+        EndMessage
     };
 
-    class ArrayBuilder;
+    class MessageBuilder
+    {
+    public:
+        MessageBuilder() noexcept = default;
+        explicit MessageBuilder(Message& msg) noexcept;
+        void setMessage(Message& msg) noexcept;
 
-    UDBus::ArrayBuilder& operator<<(UDBus::ArrayBuilder&, UDBus::ArrayBuilderManipulators) noexcept;
+        template<typename T>
+        MessageBuilder& operator<<(const T& t) noexcept
+        {
+            return append(t);
+        }
+
+        template<typename T>
+        MessageBuilder& append(const T& t) noexcept
+        {
+            if (nodeStack.empty())
+                nodeStack.push(&node);
+            // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
+            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
+            return *this;
+        }
+
+        template<typename T>
+        MessageBuilder& append(const std::vector<T>& t) noexcept
+        {
+            if (nodeStack.empty())
+                nodeStack.push(&node);
+
+            // We have to pass a triple char pointer to dbus if we want to pass arrays of strings. Therefore, we check
+            // for the type and if we have a string we do cast magic to get the char***. You don't want to even know how
+            // previous revisions of that handled this. Here for some fun:
+            // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
+            if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
+            {
+                const auto f = (void**)t.data();
+                appendArrayBasic(Tag<T>::TypeString, (void*)f, t.size(), sizeof(T));
+            }
+            else
+                appendArrayBasic(Tag<T>::TypeString, (void*)t.data(), t.size(), sizeof(T));
+            return *this;
+        }
+
+    private:
+        Message* message = nullptr;
+
+        void appendGenericBasic(char type, void* data) const noexcept;
+        void appendArrayBasic(char type, void* data, size_t n, size_t size) const noexcept;
+
+        void appendStructureEvent(char type, const char* containedSignature) const noexcept;
+
+        void closeContainers() const noexcept;
+        void endStructure() noexcept;
+
+        struct AppendNode
+        {
+            std::vector<AppendNode> children{};
+            std::function<void(AppendNode&)> event = [](AppendNode&) -> void {};
+            std::string signature{};
+            std::string innerSignature{};
+            bool bIgnore = false;
+        };
+
+        static void sendMessage(AppendNode& node) noexcept;
+        static void getSignature(AppendNode& node, std::string& signature) noexcept;
+
+        AppendNode node{};
+        std::stack<AppendNode*> nodeStack;
+        size_t layerDepth = 0;
+    };
+    template<> MessageBuilder& MessageBuilder::append<MessageManipulators>(const MessageManipulators& op) noexcept;
 
     // An abstraction on top of DBusMessage* to support RAII and make calls more concise. All functions that return a
     // DBusMessage* are also replicated here as member functions without the "dbus_message" prefix.
@@ -196,14 +268,6 @@ namespace UDBus
 
         [[nodiscard]] int get_type() const noexcept;
 
-        // ostream style << operator. Simply calls append
-        template<typename T>
-        Message& operator<<(const T& t) noexcept
-        {
-            append(t);
-            return *this;
-        }
-
         [[nodiscard]] const char* get_error_name() const noexcept;
         udbus_bool_t set_error_name(const char* name) const noexcept;
 
@@ -213,39 +277,6 @@ namespace UDBus
         // Use this to assign to a function returning a raw dbus message pointer. It's preferred to use the
         // "UDBUS_GET_MESSAGE" macro, as it will make your code more concise and less syntax heavy
         DBusMessage** getMessagePointer() noexcept;
-
-        ~Message() noexcept;
-
-        // When the default arguments are overloaded it can be used to set up dict entries
-        static Message& BeginStruct(Message& message, char type = DBUS_TYPE_STRUCT, const char* innerType = DBUS_STRUCT_BEGIN_CHAR_AS_STRING) noexcept;
-        // When the default arguments are overloaded it can be used to set up dict entries
-        static Message& EndStruct(Message& message, const char* innerType = DBUS_STRUCT_END_CHAR_AS_STRING) noexcept;
-
-        static Message& BeginVariant(Message& message) noexcept;
-        static Message& EndVariant(Message& message, std::string containedSignature = "") noexcept;
-
-        template<typename T>
-        void append(const T& t) noexcept
-        {
-            // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
-            appendGenericBasic(Tag<T>::TypeString, static_cast<void*>(&t));
-        }
-
-        template<typename T>
-        void append(const std::vector<T>& t) noexcept
-        {
-            // We have to pass a triple char pointer to dbus if we want to pass arrays of strings. Therefore, we check
-            // for the type and if we have a string we do cast magic to get the char***. You don't want to even know how
-            // previous revisions of that handled this. Here for some fun:
-            // https://github.com/MadLadSquad/UntitledDBusUtils/blob/90b4afc2e66bb28a72c211f165c58c8f2687bc88/DBusUtils.hpp#L269
-            if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
-            {
-                const auto f = static_cast<void**>(t.data());
-                appendArrayBasic(Tag<T>::TypeString, static_cast<void*>(f), t.size(), sizeof(T));
-            }
-            else
-                appendArrayBasic(Tag<T>::TypeString, static_cast<void*>(t.data()), t.size(), sizeof(T));
-        }
 
         void setUserPointer(void* ptr) noexcept;
 
@@ -273,23 +304,14 @@ namespace UDBus
 
             return result;
         }
+
+        ~Message() noexcept;
     private:
-        friend class ArrayBuilder;
-        friend UDBus::ArrayBuilder& UDBus::operator<<(UDBus::ArrayBuilder&, UDBus::ArrayBuilderManipulators) noexcept;
-
-        void appendGenericBasic(char type, void* data) noexcept;
-        void appendArrayBasic(char type, void* data, size_t size, size_t typeSize) noexcept;
-
-        static void pushToIteratorStack(Message& message, char type, const char* containedSignature) noexcept;
-        static void handleContainerTypeWithInnerSignature(Message& message, const char* type, const std::function<void(void)>& f) noexcept;
-        static void handleClosingContainers(Message& message) noexcept;
+        friend class MessageBuilder;
 
         DBusMessage* message = nullptr;
 
         std::deque<Iterator> iteratorStack{};
-        size_t signatureAccumulationDepth = 0;
-        std::deque<std::pair<std::string, std::vector<std::function<void(void)>>>> eventList{}; // Used by containers that require a type signature, like arrays and variants
-
         // Contains variant structs that will be called for an array of dictionary of variants.
         std::deque<Variant*> variantStack{};
 
@@ -498,82 +520,6 @@ else                                                                            
 
         bool bInitialGet = true;
     };
-
-    // Handle array builders because they're special :/
-    template<>
-    void Message::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept;
-
-    Message& operator<<(Message& message, MessageManipulators manipulators) noexcept;
-
-    // Manipulators for Array builder
-    ArrayBuilder& operator<<(ArrayBuilder& message, MessageManipulators manipulators) noexcept;
-    ArrayBuilder& operator<<(ArrayBuilder& builder, ArrayBuilderManipulators manipulators) noexcept;
-
-    // A class that is used to build a complex array such as an array of structs or a dictionary
-    class ArrayBuilder
-    {
-    public:
-        ArrayBuilder() = default;
-        explicit ArrayBuilder(Message& msg) noexcept;
-
-        void init(Message& msg) noexcept;
-
-        template<typename T>
-        ArrayBuilder& operator<<(const T& t) noexcept
-        {
-            append(t);
-            return *this;
-        }
-
-        template<typename T>
-        void append(const T& t) noexcept
-        {
-            if (bInitialising && !bInVariant)
-                signature += Tag<T>::TypeString;
-            else if (bInVariant)
-                variantSignature += Tag<T>::TypeString;
-
-            eventList.emplace_back([this, t]() -> void {
-                message->append(t);
-            });
-        }
-
-        template<typename T>
-        void append(const std::vector<T>& t) noexcept
-        {
-            if (bInitialising && !bInVariant)
-                signature += DBUS_TYPE_ARRAY_AS_STRING + Tag<T>::TypeString;
-            else if (bInVariant)
-                variantSignature += DBUS_TYPE_ARRAY_AS_STRING + Tag<T>::TypeString;
-
-            eventList.emplace_back([this, t]() -> void {
-                message->append(t);
-            });
-        }
-
-        [[nodiscard]] Message& getMessage() const noexcept;
-
-        ~ArrayBuilder() noexcept;
-    private:
-        friend class Message;
-        friend UDBus::ArrayBuilder& UDBus::operator<<(UDBus::ArrayBuilder&, UDBus::MessageManipulators) noexcept;
-        friend UDBus::ArrayBuilder& UDBus::operator<<(UDBus::ArrayBuilder&, UDBus::ArrayBuilderManipulators) noexcept;
-
-        bool bInitialising = true;  // This boolean allows us to automatically determine the type of the array from the first push to it
-        bool bInVariant = false;    // Whether we're in variant type: accumulates the type signature in variantSignature when true
-        bool bInDictEntry = false;  // Whether we're currently creating a dict entry. Important for proper instantiation of nested containers in arrays
-
-        Message* message = nullptr;
-
-        size_t variantIndex = 0; // Check comment in the BeginVariant case of << overload that implements MessageManipulators support
-        std::string variantSignature; // Signature of the variant for creating its iterator, since variants require a contained signature string
-        std::string signature;
-        std::vector<std::function<void(void)>> eventList; // Used by containers that require a type signature, like arrays and variants
-    };
-
-    // Enables pushing array builders to array builders
-    template<>
-    void UDBus::ArrayBuilder::append<UDBus::ArrayBuilder>(const UDBus::ArrayBuilder& t) noexcept;
 
     class PendingCall;
 
