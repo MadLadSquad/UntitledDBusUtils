@@ -1,4 +1,5 @@
 #include "DBusUtils.hpp"
+#include <iostream>
 
 UDBus::MessageBuilder::MessageBuilder(Message& msg) noexcept
 {
@@ -21,12 +22,28 @@ void UDBus::MessageBuilder::appendGenericBasic(char type, void* data) const noex
         {
             DBusMessageIter iter;
             dbus_message_iter_init_append(message->get(), &iter);
-            dbus_message_iter_append_basic(&iter, type, data);
+            // Wondering why strings are handled like this? Check the comment in DBusUtils.hpp L156
+            if (type == DBUS_TYPE_STRING)
+            {
+                auto* ptr = tempStrings[reinterpret_cast<uintptr_t>(data)].data();
+                dbus_message_iter_append_basic(&iter, type, &ptr);
+            }
+            else
+                dbus_message_iter_append_basic(&iter, type, data);
             return;
         }
+
         // Else append to the deepest iterator always
-        message->iteratorStack.back().append_basic(type, data);
+        // Wondering why strings are handled like this? Check the comment in DBusUtils.hpp L156
+        if (type == DBUS_TYPE_STRING)
+        {
+            auto* ptr = tempStrings[reinterpret_cast<uintptr_t>(data)].data();
+            message->iteratorStack.back().append_basic(type, &ptr);
+        }
+        else
+            message->iteratorStack.back().append_basic(type, data);
     };
+
     const char signature[2] = { type, '\0' };
     if (layerDepth > 0)
     {
@@ -105,19 +122,20 @@ void UDBus::MessageBuilder::getSignature(AppendNode& node, std::string& signatur
     if (node.bIgnore && node.signature.empty())
         return;
 
-    if (node.signature[0] == DBUS_TYPE_VARIANT)
-        signature += DBUS_TYPE_VARIANT_AS_STRING;
-    else if (node.signature == DBUS_TYPE_STRUCT_AS_STRING)
+    // Append the type to the signature, except for structs where the actual signatures are wrapped in () or for dict
+    // entries where they are wrapped in {}
+    if (node.signature == DBUS_TYPE_STRUCT_AS_STRING)
         signature += DBUS_STRUCT_BEGIN_CHAR_AS_STRING;
     else if (node.signature == DBUS_TYPE_DICT_ENTRY_AS_STRING)
         signature += DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING;
     else
         signature += node.signature;
 
+    // Variants need to get their own inner signature at any level
     for (auto& a : node.children)
-        getSignature(a, node.signature[0] == DBUS_TYPE_VARIANT ? node.innerSignature : signature);
+        getSignature(a, node.signature == DBUS_TYPE_VARIANT_AS_STRING ? node.innerSignature : signature);
 
-
+    // Close the signature string
     if (node.signature == DBUS_TYPE_STRUCT_AS_STRING)
         signature += DBUS_STRUCT_END_CHAR_AS_STRING;
     else if (node.signature == DBUS_TYPE_DICT_ENTRY_AS_STRING)

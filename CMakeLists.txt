@@ -17,7 +17,7 @@ pkg_check_modules(DBUS REQUIRED dbus-1)
 
 link_directories(${DBUS_LIBRARY_DIRS})
 
-set(UDBUS_HEADERS "DBusUtils.hpp" "DBusUtilsMeta.hpp")
+set(UDBUS_HEADERS "DBusUtils.hpp" "DBusUtilsMeta.hpp" "DBusUtilsStructs.hpp" "DBusUtilsTags.hpp")
 
 add_library(UntitledDBusUtils ${UDBUS_LIBRARY_TYPE} Connection.cpp DBusUtils.cpp Error.cpp Iterator.cpp Message.cpp
         PendingCall.cpp MessageAppend.cpp MessageGet.cpp ${UDBUS_HEADERS})

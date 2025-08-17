@@ -152,8 +152,21 @@ namespace UDBus
         {
             if (nodeStack.empty())
                 nodeStack.push(&node);
-            // Keep the C-style cast because the C++ solution requires 2 lines worth of casts to compile without issues
-            appendGenericBasic(Tag<T>::TypeString, (void*)&t);
+
+            // To make string handling more robust we store all strings in our own custom temporary string array.
+            // This allows for the pushing of temporary strings, reduces bugs related to lifetimes, and it makes the
+            // underlying string handling logic significantly easier compared to other approaches.
+            //
+            // Due to pointer invalidation during the construction of the message we pass the index of the temporary
+            // string, instead of a pointer. This is then cast back into the index in the callback function of the
+            // appendGenericBasic function.
+            if constexpr (Tag<T>::TypeString == DBUS_TYPE_STRING)
+            {
+                tempStrings.push_back(t);
+                appendGenericBasic(DBUS_TYPE_STRING, (void*)(tempStrings.size() - 1));
+            }
+            else
+                appendGenericBasic(Tag<T>::TypeString, (void*)&t);
             return *this;
         }
 
@@ -188,6 +201,8 @@ namespace UDBus
         void closeContainers() const noexcept;
         void endStructure() noexcept;
 
+        std::vector<std::string> tempStrings{};
+
         struct AppendNode
         {
             std::vector<AppendNode> children{};
@@ -205,6 +220,24 @@ namespace UDBus
         size_t layerDepth = 0;
     };
     template<> MessageBuilder& MessageBuilder::append<MessageManipulators>(const MessageManipulators& op) noexcept;
+
+    enum MessageGetResult
+    {
+        RESULT_SUCCESS,
+
+        RESULT_NOT_CALLED,
+
+        RESULT_MORE_FIELDS_THAN_REQUIRED,
+        RESULT_LESS_FIELDS_THAN_REQUIRED,
+
+        RESULT_INVALID_BASIC_TYPE,
+        RESULT_INVALID_STRUCT_TYPE,
+        RESULT_INVALID_ARRAY_TYPE,
+        RESULT_INVALID_DICTIONARY_TYPE,
+        RESULT_INVALID_DICTIONARY_KEY,
+        RESULT_INVALID_VARIANT_TYPE,
+        RESULT_INVALID_VARIANT_PARSING,
+    };
 
     // An abstraction on top of DBusMessage* to support RAII and make calls more concise. All functions that return a
     // DBusMessage* are also replicated here as member functions without the "dbus_message" prefix.
