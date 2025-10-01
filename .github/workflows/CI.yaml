@@ -6,7 +6,7 @@ jobs:
   Linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - name: Get dependencies
       shell: bash
       run: sudo apt-get update && sudo apt-get install gcc make g++ libtool cmake dbus libdbus-1-dev
