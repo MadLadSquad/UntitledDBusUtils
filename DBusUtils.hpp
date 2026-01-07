@@ -390,11 +390,11 @@ namespace UDBus
                     CHECK_SUCCESS(handleVariants(it, t));
                 }
             }
-            else if constexpr (is_array_type<TT>())
+            else if constexpr (is_array_type<TT>)
             {
                 CHECK_SUCCESS(handleArray(it, type, t, bWasInitial));
             }
-            else if constexpr (is_map_type<TT>())
+            else if constexpr (is_map_type<TT>)
             {
                 CHECK_SUCCESS(handleDictionaries(it, type, t, bWasInitial));
             }
@@ -527,7 +527,7 @@ else                                                                            
                 bool tmp = false;
 
                 const auto& el = t.emplace();
-                if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>())
+                if constexpr (is_complete<Tag<typename TT::key_type>>{} && !is_array_type<typename TT::key_type>)
                 {
                     if (!std::is_same_v<IgnoreType, TT> && !std::is_same_v<BumpType, TT>)
                     {

@@ -120,7 +120,7 @@ namespace UDBus
                 if (!bWasInArrayOrMap || bDestroyEverything)
                     delete &t;
             }
-            else if constexpr (is_array_type<TT>())
+            else if constexpr (is_array_type<TT>)
             {
                 bWasInArrayOrMap = true;
                 for (auto& a : t)
@@ -132,7 +132,7 @@ namespace UDBus
                 if (bDestroyEverything)
                     delete &t;
             }
-            else if constexpr (is_map_type<TT>())
+            else if constexpr (is_map_type<TT>)
             {
                 bWasInArrayOrMap = true;
                 for (auto& [key, val] : t)

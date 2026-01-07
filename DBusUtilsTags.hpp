@@ -10,6 +10,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <utility>
 
 // Use this instead of dbus_bool_t
 struct udbus_bool_t
@@ -90,26 +91,6 @@ namespace UDBus
     // There is no floating point type, instead use doubles
     MAKE_TAG(double,                        DBUS_TYPE_DOUBLE    );
 
-    MAKE_TAG(std::vector<const char*>,      DBUS_TYPE_STRING    );
-    MAKE_TAG(std::vector<char*>,            DBUS_TYPE_STRING    );
-    MAKE_TAG(std::vector<int8_t>,           DBUS_TYPE_BYTE      );
-    MAKE_TAG(std::vector<uint8_t>,          DBUS_TYPE_BYTE      );
-    MAKE_TAG(std::vector<dbus_int16_t>,     DBUS_TYPE_INT16     );
-    MAKE_TAG(std::vector<dbus_uint16_t>,    DBUS_TYPE_UINT16    );
-    MAKE_TAG(std::vector<dbus_int32_t>,     DBUS_TYPE_INT32     );
-    MAKE_TAG(std::vector<dbus_uint32_t>,    DBUS_TYPE_UINT32    );
-    // Bool should always be after uint32_t
-    MAKE_TAG(std::vector<udbus_bool_t>,     DBUS_TYPE_BOOLEAN   );
-    MAKE_TAG(std::vector<dbus_int64_t>,     DBUS_TYPE_INT64     );
-    MAKE_TAG(std::vector<dbus_uint64_t>,    DBUS_TYPE_UINT64    );
-
-    // Forward declarations to allow the consumer to plug custom types in
-    template<typename T>
-    constexpr bool is_map_type() noexcept;
-
-    template<typename T>
-    constexpr bool is_array_type() noexcept;
-
     template <template <typename...> class Base, typename T>
     struct is_specialisation_of : std::false_type {};
 
@@ -117,23 +98,46 @@ namespace UDBus
     template <template <typename...> class Base, typename... Args>
     struct is_specialisation_of<Base, Base<Args...>> : std::true_type {};
 
-#ifndef UDBUS_USING_CUSTOM_DICT_TYPES
-    template<typename T>
-    constexpr bool is_map_type() noexcept
-    {
-        if constexpr (is_specialisation_of<std::unordered_map, T>{} || is_specialisation_of<std::map, T>{})
-            return true;
-        return false;
-    }
-#endif
 
-#ifndef UDBUS_USING_CUSTOM_ARRAY_TYPES
     template<typename T>
-    constexpr bool is_array_type() noexcept
+    concept is_array_type = requires(T s)
     {
-        if constexpr (is_specialisation_of<std::vector, T>{})
-            return true;
-        return false;
-    }
-#endif
+        typename T::value_type;
+        typename T::iterator;
+
+        { s.data() } -> std::same_as<typename T::value_type*>;
+        { std::as_const(s).data() } -> std::same_as<const typename T::value_type*>;
+        { s.clear() } -> std::same_as<void>;
+
+        requires
+            requires
+            {
+                s.emplace_back();
+            }
+            || requires(typename T::value_type v)
+            {
+                s.emplace_back(std::move(v));
+            };
+    };
+
+    template<typename T>
+    concept is_map_type = requires(T s)
+    {
+        typename T::key_type;
+        typename T::mapped_type;
+        typename T::value_type;
+        typename T::iterator;
+
+        { s.clear() } -> std::same_as<void>;
+
+        requires
+            requires
+            {
+                s.emplace();
+            }
+            || requires(typename T::value_type v)
+            {
+                s.emplace(std::move(v));
+            };
+    };
 }
