@@ -5,6 +5,31 @@ UDBus::Iterator::~Iterator()
     close_container();
 }
 
+UDBus::Iterator::Iterator(Iterator&& other) noexcept
+{
+    iteratorType = other.iteratorType;
+    iterator = other.iterator;
+    inner = other.inner;
+    // Neutralise the source so its destructor's close_container() becomes a no-op and does not close the container
+    // now owned by this iterator.
+    other.iteratorType = EMPTY;
+    other.inner = nullptr;
+}
+
+UDBus::Iterator& UDBus::Iterator::operator=(Iterator&& other) noexcept
+{
+    if (this != &other)
+    {
+        close_container();
+        iteratorType = other.iteratorType;
+        iterator = other.iterator;
+        inner = other.inner;
+        other.iteratorType = EMPTY;
+        other.inner = nullptr;
+    }
+    return *this;
+}
+
 UDBus::Iterator::operator DBusMessageIter*() noexcept
 {
     return &iterator;

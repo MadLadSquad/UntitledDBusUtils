@@ -57,6 +57,23 @@ UDBus::PendingCall::~PendingCall() noexcept
     unref();
 }
 
+UDBus::PendingCall::PendingCall(PendingCall&& other) noexcept
+{
+    pending = other.pending;
+    other.pending = nullptr;
+}
+
+UDBus::PendingCall& UDBus::PendingCall::operator=(PendingCall&& other) noexcept
+{
+    if (this != &other)
+    {
+        unref();
+        pending = other.pending;
+        other.pending = nullptr;
+    }
+    return *this;
+}
+
 UDBus::PendingCall::operator DBusPendingCall**() noexcept
 {
     return &pending;

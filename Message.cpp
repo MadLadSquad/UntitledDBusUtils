@@ -11,6 +11,31 @@ UDBus::Message::~Message() noexcept
     unref();
 }
 
+UDBus::Message::Message(Message&& other) noexcept
+{
+    message = other.message;
+    iteratorStack = std::move(other.iteratorStack);
+    variantStack = std::move(other.variantStack);
+    userPointer = other.userPointer;
+    bInitialGet = other.bInitialGet;
+    other.message = nullptr;
+}
+
+UDBus::Message& UDBus::Message::operator=(Message&& other) noexcept
+{
+    if (this != &other)
+    {
+        unref();
+        message = other.message;
+        iteratorStack = std::move(other.iteratorStack);
+        variantStack = std::move(other.variantStack);
+        userPointer = other.userPointer;
+        bInitialGet = other.bInitialGet;
+        other.message = nullptr;
+    }
+    return *this;
+}
+
 DBusMessage* UDBus::Message::get() const noexcept
 {
     return message;

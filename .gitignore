@@ -37,3 +37,6 @@ main.cpp
 .idea/
 .vs/
 CMakeLists.txt.test
+graphify-out/
+.agents/
+.claude/

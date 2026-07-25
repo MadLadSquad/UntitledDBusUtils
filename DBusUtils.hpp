@@ -26,7 +26,17 @@ namespace UDBus
     {
     public:
         Error();
-        explicit Error(const DBusError& err) noexcept;
+        // Adopts ownership of an existing error by moving it out of err, leaving err re-initialised and empty. Taking
+        // a non-const reference (and moving) avoids the double free that a shallow struct copy of the name/message
+        // pointers would cause once both this Error and err are freed.
+        explicit Error(DBusError& err) noexcept;
+
+        // The wrapper owns a DBusError whose strings are freed on destruction. Copying would shallow-copy those
+        // pointers and double free them, so copying is forbidden and only moves are allowed.
+        Error(const Error&) = delete;
+        Error& operator=(const Error&) = delete;
+        Error(Error&& other) noexcept;
+        Error& operator=(Error&& other) noexcept;
 
         operator DBusError*() noexcept;
 
@@ -57,6 +67,13 @@ namespace UDBus
     public:
         Iterator() = default;
         Iterator(Message& message, int type, const char* contained_signature, Iterator& it, bool bInit) noexcept;
+
+        // The destructor closes the underlying container, so copying would double-close it. Only moves are allowed;
+        // moving neutralises the source so its destructor becomes a no-op.
+        Iterator(const Iterator&) = delete;
+        Iterator& operator=(const Iterator&) = delete;
+        Iterator(Iterator&& other) noexcept;
+        Iterator& operator=(Iterator&& other) noexcept;
 
         /**
          * @brief Initialises the iterator for appending data. It may be pre-initialised as a sub-iterator. This should
@@ -249,6 +266,13 @@ namespace UDBus
     public:
         Message() = default;
         explicit Message(DBusMessage* msg) noexcept;
+
+        // The destructor unrefs the underlying DBusMessage, so copying would double-unref it (and shallow-copy the
+        // iterator stacks, whose Iterators point back into the original deques). Only moves are allowed.
+        Message(const Message&) = delete;
+        Message& operator=(const Message&) = delete;
+        Message(Message&& other) noexcept;
+        Message& operator=(Message&& other) noexcept;
 
         operator DBusMessage*() const noexcept;
 
@@ -562,6 +586,13 @@ else                                                                            
         Connection() = default;
         explicit Connection(DBusConnection* conn) noexcept;
 
+        // The destructor unrefs (and closes, for private connections) the underlying DBusConnection, so copying would
+        // double-release it. Only moves are allowed.
+        Connection(const Connection&) = delete;
+        Connection& operator=(const Connection&) = delete;
+        Connection(Connection&& other) noexcept;
+        Connection& operator=(Connection&& other) noexcept;
+
         operator DBusConnection*() const noexcept;
 
         void bus_get(DBusBusType type, Error& error) noexcept;
@@ -580,7 +611,7 @@ else                                                                            
         void ref(const Connection& conn) noexcept;
         void ref(DBusConnection* conn) noexcept;
 
-        void unref() const noexcept;
+        void unref() noexcept;
         void close() const noexcept;
 
         void flush() const noexcept;
@@ -592,12 +623,21 @@ else                                                                            
         ~Connection() noexcept;
     private:
         DBusConnection* connection = nullptr;
+        // Private connections (bus_get_private/open_private) must be closed before the final unref, unlike shared
+        // connections which must only be unref'd. Tracked here so the destructor releases the connection correctly.
+        bool bPrivate = false;
     };
 
     class PendingCall
     {
     public:
         PendingCall() = default;
+
+        // The destructor unrefs the underlying DBusPendingCall, so copying would double-unref it. Only moves allowed.
+        PendingCall(const PendingCall&) = delete;
+        PendingCall& operator=(const PendingCall&) = delete;
+        PendingCall(PendingCall&& other) noexcept;
+        PendingCall& operator=(PendingCall&& other) noexcept;
 
         operator DBusPendingCall*() const noexcept;
         operator DBusPendingCall**() noexcept;
